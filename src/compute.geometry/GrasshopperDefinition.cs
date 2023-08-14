@@ -220,16 +220,7 @@ namespace compute.geometry
 
 
 
-                //IGH_ContextualParameter contextualParam = obj as IGH_ContextualParameter;
-                //if (contextualParam != null)
-                //{
-                //    IGH_Param param = obj as IGH_Param;
-                //    if (param != null)
-                //    {
-                //        AddInput(param, param.NickName, ref rc);
-                //    }
-                //    continue;
-                //}
+
 
                 //Custom Display component for the Grasshopper websolver
                 if (obj.ComponentGuid.ToString().ToLower() == "E259CD25-2311-4C0E-954C-62BC9CD1E1FB".ToLower())
@@ -258,6 +249,25 @@ namespace compute.geometry
                     AddOutput(param, param.NickName, ref rc);
                 }
 
+                //Add params without group
+                IGH_ContextualParameter contextualParamWG = obj as IGH_ContextualParameter;
+                if (contextualParamWG != null)
+                {
+                    var testGroup = obj as GH_Group;
+                    IGH_Param param = obj as IGH_Param;
+                    if (param != null && testGroup == null)
+                    {
+                        bool isInDict = rc._input.ContainsKey(param.NickName);
+                        if (!isInDict)
+                        {
+                            AddInput(param, param.NickName, ref rc);
+                        }
+
+                    }
+                    continue;
+                }
+
+                //Add params with group
                 var group = obj as GH_Group;
                 if (group == null)
                     continue;
@@ -265,7 +275,7 @@ namespace compute.geometry
                 string nickname = group.NickName;
                 var groupObjects = group.Objects();
 
-                if (groupObjects.Count > 0 && nickname != "")
+                if (groupObjects.Count > 0)
                 {
                     foreach (var item in groupObjects)
                     {
@@ -275,14 +285,43 @@ namespace compute.geometry
                             IGH_Param param = contextualParam as IGH_Param;
                             if (param != null)
                             {
-                                param.Description = nickname;
-                                AddInput(param, param.NickName, ref rc);
+                                if (!string.IsNullOrEmpty(nickname))
+                                {
+                                    param.Description = nickname;
+                                }
+                                bool isInDict = rc._input.ContainsKey(param.NickName);
+                                if (!isInDict)
+                                {
+                                    AddInput(param, param.NickName, ref rc);
+                                }
                             }
                         }
-
-
                     }
                 }
+
+
+
+
+                //if (groupObjects.Count > 0 && nickname != "")
+                //{
+                //    foreach (var item in groupObjects)
+                //    {
+                //        IGH_ContextualParameter contextualParam = item as IGH_ContextualParameter;
+                //        if (contextualParam != null)
+                //        {
+                //            IGH_Param param = contextualParam as IGH_Param;
+                //            if (param != null)
+                //            {
+                //                param.Description = nickname;
+                //                AddInput(param, param.NickName, ref rc);
+                //                continue;
+                //            }
+                //        }
+
+
+                //    }
+                //}
+
 
 
                 if (nickname.Contains("RH_IN") && groupObjects.Count > 0)
