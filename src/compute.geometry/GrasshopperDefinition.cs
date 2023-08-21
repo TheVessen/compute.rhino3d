@@ -216,14 +216,31 @@ namespace compute.geometry
             foreach (var obj in definition.Objects)
             {
 
+                ////Not use anymore
+                ////Custom Display component for the Grasshopper websolver
+                //if (obj.ComponentGuid.ToString().ToLower() == "E259CD25-2311-4C0E-954C-62BC9CD1E1FB".ToLower())
+                //{
+                //    var currentDisplayer = obj as GH_Component;
+                //    IGH_Param param = currentDisplayer.Params.Output[0];
+
+                //    param.NickName = "Display_" + param.InstanceGuid;
+                //    AddOutput(param, param.NickName, ref rc);
+                //}
 
 
+                Type objectClass = obj.GetType();
+                var className = objectClass.Name;
 
+                if (className == "DataToFile" || className == "DataToFiles")
+                {
+                    var currentDisplayer = obj as GH_Component;
+                    IGH_Param param = currentDisplayer.Params.Output[0];
 
+                    param.NickName = "Data_" + param.InstanceGuid;
+                    AddOutput(param, param.NickName, ref rc);
+                }
 
-
-                //Custom Display component for the Grasshopper websolver
-                if (obj.ComponentGuid.ToString().ToLower() == "E259CD25-2311-4C0E-954C-62BC9CD1E1FB".ToLower())
+                if (className == "WebDisplay")
                 {
                     var currentDisplayer = obj as GH_Component;
                     IGH_Param param = currentDisplayer.Params.Output[0];
@@ -232,9 +249,6 @@ namespace compute.geometry
                     AddOutput(param, param.NickName, ref rc);
                 }
 
-
-                Type objectClass = obj.GetType();
-                var className = objectClass.Name;
                 if (className == "ContextBakeComponent")
                 {
                     var contextBaker = obj as GH_Component;
@@ -298,31 +312,6 @@ namespace compute.geometry
                         }
                     }
                 }
-
-
-
-
-                //if (groupObjects.Count > 0 && nickname != "")
-                //{
-                //    foreach (var item in groupObjects)
-                //    {
-                //        IGH_ContextualParameter contextualParam = item as IGH_ContextualParameter;
-                //        if (contextualParam != null)
-                //        {
-                //            IGH_Param param = contextualParam as IGH_Param;
-                //            if (param != null)
-                //            {
-                //                param.Description = nickname;
-                //                AddInput(param, param.NickName, ref rc);
-                //                continue;
-                //            }
-                //        }
-
-
-                //    }
-                //}
-
-
 
                 if (nickname.Contains("RH_IN") && groupObjects.Count > 0)
                 {
