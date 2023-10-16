@@ -231,7 +231,7 @@ namespace compute.geometry
                 Type objectClass = obj.GetType();
                 var className = objectClass.Name;
 
-                if (className == "DataToFile" || className == "DataToFiles")
+                if (className == "DataToFile" || className == "DataToFiles" || className == "ExportCSVString")
                 {
                     var currentDisplayer = obj as GH_Component;
                     IGH_Param param = currentDisplayer.Params.Output[0];
