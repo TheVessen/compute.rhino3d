@@ -215,19 +215,11 @@ namespace compute.geometry
             GrasshopperDefinition rc = new GrasshopperDefinition(definition, icon);
             foreach (var obj in definition.Objects)
             {
+                
 
-                ////Not use anymore
-                ////Custom Display component for the Grasshopper websolver
-                //if (obj.ComponentGuid.ToString().ToLower() == "E259CD25-2311-4C0E-954C-62BC9CD1E1FB".ToLower())
-                //{
-                //    var currentDisplayer = obj as GH_Component;
-                //    IGH_Param param = currentDisplayer.Params.Output[0];
-
-                //    param.NickName = "Display_" + param.InstanceGuid;
-                //    AddOutput(param, param.NickName, ref rc);
-                //}
-
-
+                /*
+                 * Customized PART!!
+                 */
                 Type objectClass = obj.GetType();
                 var className = objectClass.Name;
 
@@ -301,6 +293,7 @@ namespace compute.geometry
                             {
                                 if (!string.IsNullOrEmpty(nickname))
                                 {
+                                    //Add the GH Group name to the param description for use in the web fronted
                                     param.Description = nickname;
                                 }
                                 bool isInDict = rc._input.ContainsKey(param.NickName);
