@@ -225,21 +225,19 @@ namespace compute.geometry
             GrasshopperDefinition rc = new GrasshopperDefinition(definition, icon);
             foreach (var obj in definition.Objects)
             {
+                //IGH_ContextualParameter contextualParam = obj as IGH_ContextualParameter;
+                //if (contextualParam != null)
+                //{
+                //    IGH_Param param = obj as IGH_Param;
+                //    if (param != null)
+                //    {
+                //        AddInput(param, param.NickName, ref rc);
+                //    }
+
+                //    continue;
+                //}
                 Type objectClass = obj.GetType();
                 var className = objectClass.Name;
-
-
-                IGH_ContextualParameter contextualParam = obj as IGH_ContextualParameter;
-                if (contextualParam != null)
-                {
-                    IGH_Param param = obj as IGH_Param;
-                    if (param != null)
-                    {
-                        AddInput(param, param.NickName, ref rc);
-                    }
-
-                    continue;
-                }
 
                 if (className == "DataToFile" || className == "DataToFiles" || className == "ExportCSVString" ||
                     className == "CreatePDF")
@@ -271,6 +269,25 @@ namespace compute.geometry
                     var contextPrinter = obj as GH_Component;
                     IGH_Param param = contextPrinter.Params.Input[0];
                     AddOutput(param, param.NickName, ref rc);
+                }
+
+                //Add params without group
+
+                IGH_ContextualParameter contextualParamWG = obj as IGH_ContextualParameter;
+                if (contextualParamWG != null)
+                {
+                    var testGroup = obj as GH_Group;
+                    IGH_Param param = obj as IGH_Param;
+                    if (param != null && testGroup == null)
+                    {
+                        bool isInDict = rc._input.ContainsKey(param.NickName);
+                        if (!isInDict)
+                        {
+                            AddInput(param, param.NickName, ref rc);
+                        }
+
+                    }
+                    continue;
                 }
 
                 var group = obj as GH_Group;
@@ -309,7 +326,6 @@ namespace compute.geometry
                         }
                     }
                 }
-
 
                 if (nickname.Contains("RH_IN") && groupObjects.Count > 0)
                 {
@@ -1386,9 +1402,12 @@ namespace compute.geometry
             public string GetDescription()
             {
                 IGH_ContextualParameter contextualParameter = Param as IGH_ContextualParameter;
-                if (contextualParameter != null)
+                if (Param.Description != null)
                 {
-                    return contextualParameter.Prompt;
+                    //return contextualParameter.Prompt;
+
+                    //Return Group name insted of description => Needs to be done in a more clean matter in the future
+                    return Param.Description;
                 }
 
                 return null;
