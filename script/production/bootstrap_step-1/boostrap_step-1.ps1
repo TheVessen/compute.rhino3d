@@ -1,7 +1,7 @@
 # This script installs IIS and the features required to
 # run rhino.compute.
 #
-# * Make sure you run this script from a Powershel Admin Prompt!
+# * Make sure you run this script from a Powershell Admin Prompt!
 # * Make sure Powershell Execution Policy is bypassed to run these scripts:
 Set-ExecutionPolicy Bypass -Scope Process -Force
 
@@ -12,6 +12,11 @@ function Write-Step {
   Write-Host
 }
 #EndRegion funcs
+
+$ErrorActionPreference="SilentlyContinue"
+Stop-Transcript | out-null
+$ErrorActionPreference = "Continue"
+Start-Transcript -path C:\bootstrap_step-1_log.txt -append
 
 #In case if $PSScriptRoot is empty (version of powershell V.2).  
 if(!$PSScriptRoot){ $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent } 
@@ -44,5 +49,6 @@ Write-Host "Root Script Path:" $PSScriptRoot
 
 Write-Step 'Restart Windows to complete setup!'
 Write-Host 'Rebooting in 5 seconds...'
+Stop-Transcript
 shutdown /r /t 5
 
