@@ -2,7 +2,7 @@
 # https://github.com/actions/virtual-environments/tree/main/images
 
 name: workflow ci
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
 
@@ -60,9 +60,9 @@ jobs:
           echo ${{ steps.revision.outputs.revision }}
           (get-content .\src\compute.geometry\FixedEndpoints.cs).replace('git_sha = null', 'git_sha = "${{ steps.revision.outputs.revision }}"') | set-content .\src\compute.geometry\FixedEndpoints.cs
       - name: build
-        run: dotnet publish src/hops.sln -c Release
+        run: dotnet publish src/compute.sln -c Release
       - name: artifacts
-        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: github.ref == 'refs/heads/8.x'
         uses: actions/upload-artifact@v2
         with:
           path: src/dist
