@@ -240,7 +240,7 @@ namespace compute.geometry
                 var className = objectClass.Name;
 
                 if (className == "DataToFile" || className == "DataToFiles" || className == "ExportCSV" ||
-                    className == "CreatePDF")
+                    className == "CreatePdf" || className == "MCreatePdf")
                 {
                     var currentDisplayer = obj as GH_Component;
                     IGH_Param param = currentDisplayer.Params.Output[0];
