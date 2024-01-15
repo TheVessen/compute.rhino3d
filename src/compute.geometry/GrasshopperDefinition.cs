@@ -239,8 +239,8 @@ namespace compute.geometry
                 Type objectClass = obj.GetType();
                 var className = objectClass.Name;
 
-                if (className == "DataToFile" || className == "DataToFiles" || className == "ExportCSV" ||
-                    className == "CreatePdf" || className == "MCreatePdf")
+                //Expose custom endpoints
+                if (className.StartsWith("_"))
                 {
                     var currentDisplayer = obj as GH_Component;
                     IGH_Param param = currentDisplayer.Params.Output[0];
