@@ -252,6 +252,7 @@ namespace compute.geometry
                 if (className == "WebDisplay")
                 {
                     var currentDisplayer = obj as GH_Component;
+                    
                     IGH_Param param = currentDisplayer.Params.Output[0];
                     param.NickName = "Display_" + param.InstanceGuid;
                     AddOutput(param, param.NickName, ref rc);
@@ -1123,8 +1124,8 @@ namespace compute.geometry
             }
 
 
-            if (outputSchema.Values.Count < 1)
-                throw new System.Exceptions.PayAttentionException("Looks like you've missed something..."); // TODO
+            //if (outputSchema.Values.Count < 1)
+            //    throw new System.Exceptions.PayAttentionException("Looks like you've missed something..."); // TODO
 
             // Setting warnings and errors to null ever so slightly shrinks down the json sent back to the client
             if (outputSchema.Warnings.Count < 1)
