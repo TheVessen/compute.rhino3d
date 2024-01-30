@@ -24,6 +24,7 @@ namespace compute.geometry
         static Dictionary<string, FileSystemWatcher> _filewatchers;
         static HashSet<string> _watchedFiles = new HashSet<string>();
         static uint _watchedFileRuntimeSerialNumber = 1;
+        static List<GH_Group> WebGroup { get; set; } = new List<GH_Group>();
 
         public static uint WatchedFileRuntimeSerialNumber
         {
@@ -252,7 +253,7 @@ namespace compute.geometry
                 if (className == "WebDisplay")
                 {
                     var currentDisplayer = obj as GH_Component;
-                    
+
                     IGH_Param param = currentDisplayer.Params.Output[0];
                     param.NickName = "Display_" + param.InstanceGuid;
                     AddOutput(param, param.NickName, ref rc);
@@ -286,20 +287,21 @@ namespace compute.geometry
                         {
                             AddInput(param, param.NickName, ref rc);
                         }
-
                     }
+
                     continue;
                 }
 
                 var group = obj as GH_Group;
                 if (group == null)
                     continue;
-
+                
                 string nickname = group.NickName;
+                if (nickname != String.Empty)
+                {
+                    WebGroup.Add(group);
+                }
                 var groupObjects = group.Objects();
-
-
-                //Endpoints for ContextBake and ContextPrint
 
                 //Get group description for web export
                 if (groupObjects.Count > 0)
@@ -312,11 +314,11 @@ namespace compute.geometry
                             IGH_Param param = contextualGParam as IGH_Param;
                             if (param != null)
                             {
-                                if (!string.IsNullOrEmpty(nickname))
-                                {
-                                    //Add the GH Group name to the param description for use in the web fronted
-                                    param.Description = nickname;
-                                }
+                                // if (!string.IsNullOrEmpty(nickname))
+                                // {
+                                //     //Add the GH Group name to the param description for use in the web fronted
+                                //     param.Description = nickname;
+                                // }
 
                                 bool isInDict = rc._input.ContainsKey(param.NickName);
                                 if (!isInDict)
@@ -495,22 +497,24 @@ namespace compute.geometry
                             }
                                 break;
                             case "Plane":
+                            {
+                                Grasshopper.DataTree<GH_Plane> inputTree = new Grasshopper.DataTree<GH_Plane>();
+                                foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
                                 {
-                                    Grasshopper.DataTree<GH_Plane> inputTree = new Grasshopper.DataTree<GH_Plane>();
-                                    foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                    GH_Path path = GetPath(entree.Key);
+                                    for (int i = 0; i < entree.Value.Count; i++)
                                     {
-                                        GH_Path path = GetPath(entree.Key);
-                                        for (int i = 0; i < entree.Value.Count; i++)
-                                        {
-                                            ResthopperObject restobj = entree.Value[i];
-                                            var p = new GH_Plane(JsonConvert.DeserializeObject<Rhino.Geometry.Plane>(restobj.Data));
-                                            inputTree.Add(p, path);
-                                        }
+                                        ResthopperObject restobj = entree.Value[i];
+                                        var p = new GH_Plane(
+                                            JsonConvert.DeserializeObject<Rhino.Geometry.Plane>(restobj.Data));
+                                        inputTree.Add(p, path);
                                     }
-                                    contextualParameter.GetType()
-                                        .GetMethod("AssignContextualDataTree")?
-                                        .Invoke(contextualParameter, new object[] { inputTree });
                                 }
+
+                                contextualParameter.GetType()
+                                    .GetMethod("AssignContextualDataTree")?
+                                    .Invoke(contextualParameter, new object[] { inputTree });
+                            }
                                 break;
                             case "Line":
                             {
@@ -1042,76 +1046,77 @@ namespace compute.geometry
                             }
                                 break;
                             case GH_Extrusion ghValue:
-                                {
-                                    Extrusion rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<Extrusion>(rhValue, rhinoVersion));
-                                }
+                            {
+                                Extrusion rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<Extrusion>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_PointCloud ghValue:
-                                {
-                                    PointCloud rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<PointCloud>(rhValue, rhinoVersion));
-                                }
+                            {
+                                PointCloud rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<PointCloud>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_InstanceReference ghValue:
-                                {
-                                    InstanceReferenceGeometry rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<InstanceReferenceGeometry>(rhValue, rhinoVersion));
-                                }
+                            {
+                                InstanceReferenceGeometry rhValue = ghValue.Value;
+                                resthopperObjectList.Add(
+                                    GetResthopperObject<InstanceReferenceGeometry>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_Hatch ghValue:
-                                {
-                                    Hatch rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<Hatch>(rhValue, rhinoVersion));
-                                }
+                            {
+                                Hatch rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<Hatch>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_LinearDimension ghValue:
-                                {
-                                    LinearDimension rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<LinearDimension>(rhValue, rhinoVersion));
-                                }
+                            {
+                                LinearDimension rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<LinearDimension>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_RadialDimension ghValue:
-                                {
-                                    RadialDimension rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<RadialDimension>(rhValue, rhinoVersion));
-                                }
+                            {
+                                RadialDimension rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<RadialDimension>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_AngularDimension ghValue:
-                                {
-                                    AngularDimension rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<AngularDimension>(rhValue, rhinoVersion));
-                                }
+                            {
+                                AngularDimension rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<AngularDimension>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_OrdinateDimension ghValue:
-                                {
-                                    OrdinateDimension rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<OrdinateDimension>(rhValue, rhinoVersion));
-                                }
+                            {
+                                OrdinateDimension rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<OrdinateDimension>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_Leader ghValue:
-                                {
-                                    Leader rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<Leader>(rhValue, rhinoVersion));
-                                }
+                            {
+                                Leader rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<Leader>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_TextEntity ghValue:
-                                {
-                                    TextEntity rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<TextEntity>(rhValue, rhinoVersion));
-                                }
+                            {
+                                TextEntity rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<TextEntity>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_TextDot ghValue:
-                                {
-                                    TextDot rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<TextDot>(rhValue, rhinoVersion));
-                                }
+                            {
+                                TextDot rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<TextDot>(rhValue, rhinoVersion));
+                            }
                                 break;
                             case GH_Centermark ghValue:
-                                {
-                                    Centermark rhValue = ghValue.Value;
-                                    resthopperObjectList.Add(GetResthopperObject<Centermark>(rhValue, rhinoVersion));
-                                }
+                            {
+                                Centermark rhValue = ghValue.Value;
+                                resthopperObjectList.Add(GetResthopperObject<Centermark>(rhValue, rhinoVersion));
+                            }
                                 break;
                         }
                     }
@@ -1228,6 +1233,7 @@ namespace compute.geometry
                     Default = i.Value.GetDefault(),
                     Minimum = i.Value.GetMinimum(),
                     Maximum = i.Value.GetMaximum(),
+                    GroupeName = i.Value.GetGroup()
                 };
                 if (_singularComponent != null)
                 {
@@ -1500,10 +1506,32 @@ namespace compute.geometry
                 IGH_ContextualParameter contextualParameter = Param as IGH_ContextualParameter;
                 if (Param.Description != null)
                 {
-                    //return contextualParameter.Prompt;
+                    return contextualParameter.Prompt;
+                }
 
-                    //Return Group name insted of description => Needs to be done in a more clean matter in the future
-                    return Param.Description;
+                return null;
+            }
+
+            public string GetGroup()
+            {
+                IGH_ContextualParameter contextualParameter = Param as IGH_ContextualParameter;
+                if (contextualParameter != null)
+                {
+                    string mainGroupName = null;
+                    GH_Group mainGroup = null;
+
+                    // First, find the main group that contains the parameter
+                    foreach (var group in WebGroup)
+                    {
+                        if (group.Objects().Any(e => e.InstanceGuid == Param.InstanceGuid) && group.NickName != "")
+                        {
+                            mainGroupName = group.NickName;
+                            mainGroup = group;
+                            break; // Break after finding the main group
+                        }
+                    }
+
+                    return mainGroupName;
                 }
 
                 return null;

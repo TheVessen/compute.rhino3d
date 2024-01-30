@@ -11,6 +11,8 @@
   <component name="ChangeListManager">
     <list default="true" id="b4d40c8f-60ed-4f78-abaf-182e7bf5a8dc" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/compute.geometry/IO/Schema.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/IO/Schema.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -24,6 +26,9 @@
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$USER_HOME$/AppData/Local/Symbols/src/dotnet/runtime/8f4568cdaa2f9654fd133a17cd2dcc55b5f42455/src/libraries/System.Private.CoreLib/src/System/Threading/ManualResetEventSlim.cs" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -39,7 +44,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    ".NET Launch Settings Profile.compute.geometry.executor": "Run",
+    ".NET Launch Settings Profile.compute.geometry.executor": "Debug",
     ".NET Launch Settings Profile.rhino.compute.executor": "Run",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
@@ -49,13 +54,14 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "HotReloadSettingsPage",
     "vue.rearranger.settings.migration": "true"
   },
   "keyToStringList": {
     "rider.external.source.directories": [
-      "C:\\Users\\Felix Brunold\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\DecompilerCache",
-      "C:\\Users\\Felix Brunold\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\SourcesCache",
-      "C:\\Users\\Felix Brunold\\AppData\\Local\\Symbols\\src"
+      "C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\DecompilerCache",
+      "C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\SourcesCache",
+      "C:\\Users\\Felix\\AppData\\Local\\Symbols\\src"
     ]
   }
 }]]></component>
@@ -64,7 +70,7 @@
       <option name="LAUNCH_PROFILE_PROJECT_FILE_PATH" value="$PROJECT_DIR$/compute.geometry/compute.geometry.csproj" />
       <option name="LAUNCH_PROFILE_TFM" value="net7.0-windows" />
       <option name="LAUNCH_PROFILE_NAME" value="compute.geometry" />
-      <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="USE_EXTERNAL_CONSOLE" value="1" />
       <option name="USE_MONO" value="0" />
       <option name="RUNTIME_ARGUMENTS" value="" />
       <option name="GENERATE_APPLICATIONHOST_CONFIG" value="1" />
@@ -79,7 +85,7 @@
       <option name="LAUNCH_PROFILE_PROJECT_FILE_PATH" value="$PROJECT_DIR$/rhino.compute/rhino.compute.csproj" />
       <option name="LAUNCH_PROFILE_TFM" value="net7.0" />
       <option name="LAUNCH_PROFILE_NAME" value="rhino.compute" />
-      <option name="USE_EXTERNAL_CONSOLE" value="0" />
+      <option name="USE_EXTERNAL_CONSOLE" value="1" />
       <option name="USE_MONO" value="0" />
       <option name="RUNTIME_ARGUMENTS" value="" />
       <option name="GENERATE_APPLICATIONHOST_CONFIG" value="1" />
@@ -90,6 +96,10 @@
         <option name="Build" />
       </method>
     </configuration>
+    <list>
+      <item itemvalue=".NET Launch Settings Profile.compute.geometry" />
+      <item itemvalue=".NET Launch Settings Profile.rhino.compute" />
+    </list>
     <recent_temporary>
       <list>
         <item itemvalue=".NET Launch Settings Profile.compute.geometry" />
@@ -109,13 +119,34 @@
       <workItem from="1701455745956" duration="103000" />
       <workItem from="1702286432284" duration="1819000" />
       <workItem from="1706084314383" duration="1210000" />
+      <workItem from="1706537095567" duration="5166000" />
+      <workItem from="1706546811889" duration="1957000" />
+      <workItem from="1706594947737" duration="5080000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="VcsManagerConfiguration">
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
+  </component>
+  <component name="XDebuggerManager">
+    <pin-to-top-manager>
+      <pinned-members>
+        <PinnedItemInfo parentTag="Type#Grasshopper.Kernel.GH_Param`1" memberName="Recipients" />
+      </pinned-members>
+    </pin-to-top-manager>
   </component>
 </project>
