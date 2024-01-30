@@ -303,7 +303,6 @@ namespace compute.geometry
                 }
                 var groupObjects = group.Objects();
 
-                //Get group description for web export
                 if (groupObjects.Count > 0)
                 {
                     foreach (var item in groupObjects)
@@ -314,11 +313,6 @@ namespace compute.geometry
                             IGH_Param param = contextualGParam as IGH_Param;
                             if (param != null)
                             {
-                                // if (!string.IsNullOrEmpty(nickname))
-                                // {
-                                //     //Add the GH Group name to the param description for use in the web fronted
-                                //     param.Description = nickname;
-                                // }
 
                                 bool isInDict = rc._input.ContainsKey(param.NickName);
                                 if (!isInDict)
@@ -1233,7 +1227,7 @@ namespace compute.geometry
                     Default = i.Value.GetDefault(),
                     Minimum = i.Value.GetMinimum(),
                     Maximum = i.Value.GetMaximum(),
-                    GroupeName = i.Value.GetGroup()
+                    GroupName = i.Value.GetGroup()
                 };
                 if (_singularComponent != null)
                 {
