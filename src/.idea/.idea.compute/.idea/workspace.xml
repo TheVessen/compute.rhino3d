@@ -11,8 +11,6 @@
   <component name="ChangeListManager">
     <list default="true" id="b4d40c8f-60ed-4f78-abaf-182e7bf5a8dc" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compute.geometry/IO/Schema.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/IO/Schema.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -54,14 +52,14 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "HotReloadSettingsPage",
+    "settings.editor.selected.configurable": "preferences.lookFeel",
     "vue.rearranger.settings.migration": "true"
   },
   "keyToStringList": {
     "rider.external.source.directories": [
-      "C:\\Users\\xilef\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\DecompilerCache",
-      "C:\\Users\\xilef\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\SourcesCache",
-      "C:\\Users\\xilef\\AppData\\Local\\Symbols\\src"
+      "C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\DecompilerCache",
+      "C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\SourcesCache",
+      "C:\\Users\\Felix\\AppData\\Local\\Symbols\\src"
     ]
   }
 }]]></component>
@@ -123,6 +121,8 @@
       <workItem from="1706546811889" duration="1957000" />
       <workItem from="1706594947737" duration="5080000" />
       <workItem from="1706620022867" duration="1245000" />
+      <workItem from="1706681468149" duration="169000" />
+      <workItem from="1706681709606" duration="1183000" />
     </task>
     <servers />
   </component>
