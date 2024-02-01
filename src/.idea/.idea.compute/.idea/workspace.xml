@@ -42,7 +42,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    ".NET Launch Settings Profile.compute.geometry.executor": "Debug",
+    ".NET Launch Settings Profile.compute.geometry.executor": "Run",
     ".NET Launch Settings Profile.rhino.compute.executor": "Run",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
@@ -123,6 +123,7 @@
       <workItem from="1706620022867" duration="1245000" />
       <workItem from="1706681468149" duration="169000" />
       <workItem from="1706681709606" duration="1183000" />
+      <workItem from="1706783152903" duration="4097000" />
     </task>
     <servers />
   </component>
