@@ -79,6 +79,8 @@ namespace compute.geometry
                 return null;
             GrasshopperDefinition rc = DataCache.GetCachedDefinition(url);
 
+            
+
             if (rc != null)
             {
                 LogDebug("Using cached definition");
@@ -100,7 +102,9 @@ namespace compute.geometry
                 rc.IsLocalFileDefinition =
                     !url.StartsWith("http", StringComparison.OrdinalIgnoreCase) && File.Exists(url);
             }
+            
 
+            
             if (cache)
             {
                 DataCache.SetCachedDefinition(url, rc, null);

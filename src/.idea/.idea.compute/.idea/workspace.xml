@@ -11,6 +11,8 @@
   <component name="ChangeListManager">
     <list default="true" id="b4d40c8f-60ed-4f78-abaf-182e7bf5a8dc" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/compute.geometry/DataCache.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/DataCache.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -26,7 +28,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$USER_HOME$/AppData/Local/Symbols/src/dotnet/runtime/8f4568cdaa2f9654fd133a17cd2dcc55b5f42455/src/libraries/System.Private.CoreLib/src/System/Threading/ManualResetEventSlim.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/764dfaa80dca4e12ab848969fdfa61265d2400/1f/b676c959/IGH_ContextualParameter.cs" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -40,29 +42,29 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    ".NET Launch Settings Profile.compute.geometry.executor": "Run",
-    ".NET Launch Settings Profile.rhino.compute.executor": "Run",
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "WebServerToolWindowFactoryState": "false",
-    "git-widget-placeholder": "Compute8",
-    "node.js.detected.package.eslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.lookFeel",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;.NET Launch Settings Profile.compute.geometry.executor&quot;: &quot;Run&quot;,
+    &quot;.NET Launch Settings Profile.rhino.compute.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Compute8&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   },
-  "keyToStringList": {
-    "rider.external.source.directories": [
-      "C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\DecompilerCache",
-      "C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\SourcesCache",
-      "C:\\Users\\Felix\\AppData\\Local\\Symbols\\src"
+  &quot;keyToStringList&quot;: {
+    &quot;rider.external.source.directories&quot;: [
+      &quot;C:\\Users\\xilef\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\DecompilerCache&quot;,
+      &quot;C:\\Users\\xilef\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\SourcesCache&quot;,
+      &quot;C:\\Users\\xilef\\AppData\\Local\\Symbols\\src&quot;
     ]
   }
-}]]></component>
+}</component>
   <component name="RunManager" selected=".NET Launch Settings Profile.compute.geometry">
     <configuration name="compute.geometry" type="LaunchSettings" factoryName=".NET Launch Settings Profile" temporary="true">
       <option name="LAUNCH_PROFILE_PROJECT_FILE_PATH" value="$PROJECT_DIR$/compute.geometry/compute.geometry.csproj" />
@@ -124,6 +126,10 @@
       <workItem from="1706681468149" duration="169000" />
       <workItem from="1706681709606" duration="1183000" />
       <workItem from="1706783152903" duration="4097000" />
+      <workItem from="1707249423803" duration="2684000" />
+      <workItem from="1707488302900" duration="4676000" />
+      <workItem from="1707555735290" duration="686000" />
+      <workItem from="1707577249433" duration="1404000" />
     </task>
     <servers />
   </component>

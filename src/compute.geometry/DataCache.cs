@@ -138,7 +138,13 @@ namespace compute.geometry
             }
             return def.Definition;
         }
-
+        
+        /// <summary>
+        /// Modified setChangedDefinition to not write to disk
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="definition"></param>
+        /// <param name="data"></param>
         public static void SetCachedDefinition(string key, GrasshopperDefinition definition, string data)
         {
             CachedDefinition cachedef = new CachedDefinition
@@ -147,28 +153,38 @@ namespace compute.geometry
                 WatchedFileRuntimeSerialNumber = GrasshopperDefinition.WatchedFileRuntimeSerialNumber
             };
             System.Runtime.Caching.MemoryCache.Default.Set(key, cachedef, CachePolicy);
-
-            if (!string.IsNullOrWhiteSpace(data))
-            {
-                string filename = DefinitionCacheFileName(key);
-                if (filename != null && !System.IO.File.Exists(filename))
-                {
-                    try
-                    {
-                        if (!System.IO.Directory.Exists(DefinitionCacheDirectory))
-                            System.IO.Directory.CreateDirectory(DefinitionCacheDirectory);
-
-                        System.IO.File.WriteAllText(filename, data);
-                        System.Threading.Tasks.Task.Run(() => DataCache.CGCacheDirectory());
-                    }
-                    catch(Exception ex)
-                    {
-                        Log.Error($"Unable to write cache file: {filename}");
-                        Log.Error(ex, "File error exception");
-                    }
-                }
-            }
         }
+
+        // public static void SetCachedDefinition(string key, GrasshopperDefinition definition, string data)
+        // {
+        //     CachedDefinition cachedef = new CachedDefinition
+        //     {
+        //         Definition = definition,
+        //         WatchedFileRuntimeSerialNumber = GrasshopperDefinition.WatchedFileRuntimeSerialNumber
+        //     };
+        //     System.Runtime.Caching.MemoryCache.Default.Set(key, cachedef, CachePolicy);
+        //
+        //     if (!string.IsNullOrWhiteSpace(data))
+        //     {
+        //         string filename = DefinitionCacheFileName(key);
+        //         if (filename != null && !System.IO.File.Exists(filename))
+        //         {
+        //             try
+        //             {
+        //                 if (!System.IO.Directory.Exists(DefinitionCacheDirectory))
+        //                     System.IO.Directory.CreateDirectory(DefinitionCacheDirectory);
+        //
+        //                 System.IO.File.WriteAllText(filename, data);
+        //                 System.Threading.Tasks.Task.Run(() => DataCache.CGCacheDirectory());
+        //             }
+        //             catch(Exception ex)
+        //             {
+        //                 Log.Error($"Unable to write cache file: {filename}");
+        //                 Log.Error(ex, "File error exception");
+        //             }
+        //         }
+        //     }
+        // }
 
         public static string GetCachedSolveResults(string key)
         {
