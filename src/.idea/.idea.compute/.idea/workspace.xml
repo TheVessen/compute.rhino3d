@@ -11,7 +11,6 @@
   <component name="ChangeListManager">
     <list default="true" id="b4d40c8f-60ed-4f78-abaf-182e7bf5a8dc" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compute.geometry/DataCache.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/DataCache.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -33,6 +32,7 @@
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
+  <component name="MetaFilesCheckinStateConfiguration" checkMetaFiles="true" />
   <component name="ProjectColorInfo">{
   &quot;customColor&quot;: &quot;&quot;,
   &quot;associatedIndex&quot;: 7
@@ -59,9 +59,9 @@
   },
   &quot;keyToStringList&quot;: {
     &quot;rider.external.source.directories&quot;: [
-      &quot;C:\\Users\\xilef\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\DecompilerCache&quot;,
-      &quot;C:\\Users\\xilef\\AppData\\Roaming\\JetBrains\\Rider2023.2\\resharper-host\\SourcesCache&quot;,
-      &quot;C:\\Users\\xilef\\AppData\\Local\\Symbols\\src&quot;
+      &quot;C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\DecompilerCache&quot;,
+      &quot;C:\\Users\\Felix\\AppData\\Roaming\\JetBrains\\Rider2023.3\\resharper-host\\SourcesCache&quot;,
+      &quot;C:\\Users\\Felix\\AppData\\Local\\Symbols\\src&quot;
     ]
   }
 }</component>
@@ -130,12 +130,17 @@
       <workItem from="1707488302900" duration="4676000" />
       <workItem from="1707555735290" duration="686000" />
       <workItem from="1707577249433" duration="1404000" />
+      <workItem from="1708329286400" duration="1365000" />
+      <workItem from="1708354625899" duration="2287000" />
+      <workItem from="1708674522552" duration="639000" />
+      <workItem from="1708687056978" duration="813000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="UnityCheckinConfiguration" checkUnsavedScenes="true" />
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">
       <map>

@@ -161,7 +161,6 @@ namespace compute.geometry
             {
                 rc._output[output.NickName] = output;
             }
-
             return rc;
         }
 
