@@ -243,9 +243,13 @@ namespace compute.geometry
                 //Expose custom endpoints
                 if (className.StartsWith("_"))
                 {
-                    var currentDisplayer = obj as GH_Component;
-                    IGH_Param param = currentDisplayer.Params.Output[0];
+                    var dataComponent = obj as GH_Component;
+                    IGH_Param param = dataComponent.Params.Output[0];
                     param.NickName = "Data_" + param.InstanceGuid;
+                    if (className.Contains("JsonData"))
+                    {
+                        param.NickName = "AdditionalData" + param.InstanceGuid;
+                    }
                     AddOutput(param, param.NickName, ref rc);
                 }
 
