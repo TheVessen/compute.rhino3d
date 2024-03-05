@@ -11,7 +11,6 @@
   <component name="ChangeListManager">
     <list default="true" id="b4d40c8f-60ed-4f78-abaf-182e7bf5a8dc" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.compute/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" beforeDir="false" afterPath="$PROJECT_DIR$/compute.geometry/GrasshopperDefinition.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -134,6 +133,11 @@
       <workItem from="1708354625899" duration="2287000" />
       <workItem from="1708674522552" duration="639000" />
       <workItem from="1708687056978" duration="813000" />
+      <workItem from="1709534369969" duration="893000" />
+      <workItem from="1709535957084" duration="91000" />
+      <workItem from="1709536091669" duration="1356000" />
+      <workItem from="1709547489049" duration="1537000" />
+      <workItem from="1709561152463" duration="2124000" />
     </task>
     <servers />
   </component>
