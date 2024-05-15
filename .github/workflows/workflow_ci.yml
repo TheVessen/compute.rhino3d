@@ -2,15 +2,14 @@
 # https://github.com/actions/virtual-environments/tree/main/images
 
 name: workflow ci
-on: 
-  push: 
-  pull_request: 
+on:
+  push:
+  pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 1 * *'
+    - cron: "0 0 1 * *"
 
 jobs:
-
   #checks if this file has changed
   check_workflow:
     name: check workflow_ci
@@ -67,7 +66,7 @@ jobs:
       - name: build
         run: dotnet publish src/compute.sln -c Release
       - name: artifacts
-        if: github.ref == 'refs/heads/8.x'
+        if: github.ref == 'refs/heads/Compute8'
         uses: actions/upload-artifact@v2
         with:
           path: src/dist
