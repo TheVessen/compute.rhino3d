@@ -17,8 +17,8 @@ function Write-Step {
 }
 function Download {
     param (
-        [Parameter(Mandatory=$true)][string] $url,
-        [Parameter(Mandatory=$true)][string] $output
+        [Parameter(Mandatory = $true)][string] $url,
+        [Parameter(Mandatory = $true)][string] $output
     )
     (New-Object System.Net.WebClient).DownloadFile($url, $output)
 }
@@ -60,15 +60,15 @@ Move-Item -Path $computeGeometryPath -Destination $backupDir
 
 $gitPrefix = 'https://api.github.com/repos'
 $nightlyPrefix = 'https://nightly.link'
-$actionurl = 'mcneel/compute.rhino3d/actions/artifacts'
+$actionurl = 'theVessen/compute.rhino3d/actions/artifacts'
 $giturl = "$gitPrefix/$actionurl"
 
 $response = Invoke-RestMethod -Method Get -Uri $giturl
 $artifacts = $response.artifacts
 $artifactID = -1
-$matchingBranch = "8.x"
+$matchingBranch = "Compute8"
 
-for($i=0; $i -lt $artifacts.Length; $i++){
+for ($i = 0; $i -lt $artifacts.Length; $i++) {
     $latest = $artifacts[$i]
     $artifactID = $latest.id
     $artifactBranch = $latest.workflow_run.head_branch 
@@ -77,14 +77,14 @@ for($i=0; $i -lt $artifacts.Length; $i++){
     }
 }
 
-if ($artifactID -lt 0){
+if ($artifactID -lt 0) {
     Write-Host "Unable to find the latest $matchingBranch build artifact." -ForegroundColor Red
     exit 1
 }
 
 $downloadurl = "$nightlyPrefix/$actionurl/$artifactID.zip"
 
-if (-Not (Test-Path -Path $physicalPathRoot)){
+if (-Not (Test-Path -Path $physicalPathRoot)) {
     New-Item $physicalPathRoot -ItemType Directory
 }
 
@@ -97,7 +97,7 @@ if ((Test-Path $physicalPathRoot)) {
 
 Write-Step "Granting application pool permissions on compute directories" 
 cmd /c icacls $rhinoComputePath /grant ("IIS AppPool\$appPoolName" + ':(OI)(CI)F') /t /c /q 
-cmd /c icacls $computeGeometryPath /grant ("IIS AppPool\$appPoolName"+ ':(OI)(CI)F') /t /c /q 
+cmd /c icacls $computeGeometryPath /grant ("IIS AppPool\$appPoolName" + ':(OI)(CI)F') /t /c /q 
 
 Write-Step "Starting the IIS Service"
 net start w3svc
