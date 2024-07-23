@@ -246,6 +246,7 @@ namespace compute.geometry
                     var dataComponent = obj as GH_Component;
                     IGH_Param param = dataComponent.Params.Output[0];
                     param.NickName = "Data_" + param.InstanceGuid;
+                    //Set spectial property for exposing JSON data
                     if (className.Contains("JsonData"))
                     {
                         param.NickName = "AdditionalData" + param.InstanceGuid;
@@ -903,7 +904,6 @@ namespace compute.geometry
                             inputGroup.Param.AddVolatileData(path, i, data);
                         }
                     }
-
                     continue;
                 }
             }
@@ -1150,7 +1150,6 @@ namespace compute.geometry
                     schema.Errors.Add(errorMsg);
                     HasErrors = true;
                 }
-
                 if (Config.Debug)
                 {
                     foreach (var msg in obj.RuntimeMessages(GH_RuntimeMessageLevel.Warning))
@@ -1159,7 +1158,6 @@ namespace compute.geometry
                         LogDebug(warningMsg);
                         schema.Warnings.Add(warningMsg);
                     }
-
                     foreach (var msg in obj.RuntimeMessages(GH_RuntimeMessageLevel.Remark))
                     {
                         LogDebug($"Remark in grasshopper component: \"{obj.Name}\" ({obj.InstanceGuid}): {msg}");
@@ -1176,7 +1174,6 @@ namespace compute.geometry
             {
                 return "Geometry";
             }
-
             return param.TypeName;
         }
 
@@ -1202,7 +1199,6 @@ namespace compute.geometry
                     return rc;
                 }
             }
-
             return null;
         }
 
@@ -1220,6 +1216,7 @@ namespace compute.geometry
             foreach (var i in sortedInputs)
             {
                 inputNames.Add(i.Key);
+                //ADDED Custom Group Name attribute for input
                 var inputSchema = new InputParamSchema
                 {
                     Name = i.Key,
@@ -1506,7 +1503,6 @@ namespace compute.geometry
                 {
                     return contextualParameter.Prompt;
                 }
-
                 return null;
             }
 
@@ -1526,6 +1522,21 @@ namespace compute.geometry
                             mainGroupName = group.NickName;
                             mainGroup = group;
                             break; // Break after finding the main group
+                        }
+                    }
+                    
+                    // Check if the main group is inside another group
+                    if (mainGroup != null)
+                    {
+                        foreach (var group in WebGroup)
+                        {
+                            if (group.Objects().Any(e => e.InstanceGuid == mainGroup.InstanceGuid) && group != mainGroup)
+                            {
+                                // This means mainGroup is nested inside another group
+                                // You can modify this part to return a specific value or perform an action as needed
+                                mainGroupName = $"{group.NickName}::{mainGroupName}";
+                                break; // Optional: break if you only care about finding one nesting level
+                            }
                         }
                     }
 
