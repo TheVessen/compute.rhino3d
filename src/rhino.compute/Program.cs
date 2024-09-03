@@ -23,26 +23,27 @@ namespace rhino.compute
         class Options
         {
             [Option("childof",
-             Required = false,
-             HelpText = @"Process Handle of parent process. Compute watches for the existence 
+                Required = false,
+                HelpText = @"Process Handle of parent process. Compute watches for the existence 
 of this handle and will shut down when this process has exited")]
             public int ChildOf { get; set; }
 
             [Option("childcount",
-             Required = false,
-             HelpText = "Number of child compute.geometry processes to manage")]
+                Required = false,
+                HelpText = "Number of child compute.geometry processes to manage")]
             public int ChildCount { get; set; } = 4;
 
             [Option("spawn-on-startup",
-             Required = false,
-             Default = false,
-             HelpText = "Determines whether to launch a child compute.geometry process when rhino.compute gets started")]
+                Required = false,
+                Default = false,
+                HelpText =
+                    "Determines whether to launch a child compute.geometry process when rhino.compute gets started")]
             public bool SpawnOnStartup { get; set; }
 
-            [Option("idlespan", 
-             Required = false,
-             HelpText = 
-@"Seconds that child compute.geometry processes should remain open between requests. (Default 1 hour)
+            [Option("idlespan",
+                Required = false,
+                HelpText =
+                    @"Seconds that child compute.geometry processes should remain open between requests. (Default 1 hour)
 When rhino.compute.exe does not receive requests to solve over a period of 'idlespan' seconds, child
 compute.geometry.exe processes will shut down and stop incurring core hour billing. At some date in the
 future when a new request is received, the child processes will be relaunched which will cause a delay on
@@ -50,13 +51,14 @@ requests while the child processes are launching.")]
             public int IdleSpanSeconds { get; set; } = 60 * 60;
 
             [Option("port",
-              Required = false,
-              HelpText = "Port number to run rhino.compute on")]
+                Required = false,
+                HelpText = "Port number to run rhino.compute on")]
             public int Port { get; set; } = -1;
         }
 
         static System.Diagnostics.Process _parentProcess;
         static System.Timers.Timer _selfDestructTimer;
+
         public static IConfiguration Configuration { get; } = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -68,11 +70,11 @@ requests while the child processes are launching.")]
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
             Config.Load();
             Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(Configuration)
-            .Filter.ByExcluding("RequestPath in ['/healthcheck', '/favicon.ico']")
-            .Enrich.FromLogContext()
-            .WriteTo.Console()
-            .CreateLogger();
+                .ReadFrom.Configuration(Configuration)
+                .Filter.ByExcluding("RequestPath in ['/healthcheck', '/favicon.ico']")
+                .Enrich.FromLogContext()
+                .WriteTo.Console()
+                .CreateLogger();
 
             int port = -1;
             Parser.Default.ParseArguments<Options>(args).WithParsed(o =>
@@ -91,23 +93,22 @@ requests while the child processes are launching.")]
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     var b = webBuilder.ConfigureKestrel((context, options) =>
-                    {
-                        // Handle requests up to 50 MB
-                        options.Limits.MaxRequestBodySize = Config.MaxRequestSize;
-                    })
-                    .UseIISIntegration()
-                    .UseStartup<Startup>()
-                    .CaptureStartupErrors(true);
+                        {
+                            // Handle requests up to 50 MB
+                            options.Limits.MaxRequestBodySize = Config.MaxRequestSize;
+                        })
+                        .UseIISIntegration()
+                        .UseStartup<Startup>()
+                        .CaptureStartupErrors(true);
 
                     if (port > 0)
                     {
                         b.UseUrls($"http://localhost:{port}");
                         ComputeChildren.ParentPort = port;
                     }
-
                 }).Build();
 
-            if(_parentProcess?.MainModule != null)
+            if (_parentProcess?.MainModule != null)
             {
                 var parentPath = _parentProcess.MainModule.FileName;
                 if (Path.GetFileName(parentPath) == "Rhino.exe")
@@ -117,7 +118,7 @@ requests while the child processes are launching.")]
             }
 
             Log.Information($"Rhino compute started at {DateTime.Now.ToLocalTime()}");
-            
+
             var logger = host.Services.GetRequiredService<ILogger<ReverseProxyModule>>();
             ReverseProxyModule.InitializeConcurrentRequestLogging(logger);
 
@@ -138,15 +139,18 @@ requests while the child processes are launching.")]
                 _selfDestructTimer.AutoReset = true;
                 _selfDestructTimer.Start();
             }
+
             host.Run();
         }
 
         public static bool IsParentRhinoProcess(int processId)
         {
-            if (_parentProcess != null && _parentProcess.ProcessName.Contains("rhino", StringComparison.OrdinalIgnoreCase))
+            if (_parentProcess != null &&
+                _parentProcess.ProcessName.Contains("rhino", StringComparison.OrdinalIgnoreCase))
             {
                 return (_parentProcess.Id == processId);
             }
+
             return false;
         }
     }
