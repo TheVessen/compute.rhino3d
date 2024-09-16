@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.13] - 2024-08-29
+
+### Fixed
+
+- Fixed a bug in the Function Source Manager which was causing the document to expire incorrectly when multiple functions were instantiated by the Hops component.
+
+## [0.16.12] - 2024-08-28
+
+### Fixed
+
+- In the change made to version 0.16.11, the schema of the default input values were changed to a DataTree<ResthopperObject>. However, this change broke some code in instances where people would be sending the older style of values as defaults. The changes made in this build (0.16.12) will now properly handle the deserialization of values sent either as a DataTree<ResthopperObject> or as the older style of default values.
+
+## [0.16.11] - 2024-08-20
+
+### Fixed
+
+- Fixed an issue with default values. Previously, default values would only work on some parameter types and only if a single value was set via persistent data. Now, any parameter type (except for model objects) will work as setting a default value and you can pass in an item, list, or data tree as your default value.
+
+### Added
+
+- Added the ability to make some parameters act as Optional inputs. If you use a Context Get component and set the AtLeast value to 0, then that parameter will be treated as an Optional input.
+
 ## [0.16.10] - 2024-08-08
 
 ### Fixed
