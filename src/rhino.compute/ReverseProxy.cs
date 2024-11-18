@@ -103,12 +103,12 @@ namespace rhino.compute
             int parentProcessId = System.Convert.ToInt32(request.Query["parent"]);
             if (Program.IsParentRhinoProcess(parentProcessId))
             {
-                for(int i=0; i<children; i++)
+                for (int i=0; i<children; i++)
                 {
                     ComputeChildren.LaunchCompute(false);
                 }
             }
-            return null;
+            return Task.CompletedTask;
         }
 
         async Task AwaitInitTask()

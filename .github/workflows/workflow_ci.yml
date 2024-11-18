@@ -51,7 +51,7 @@ jobs:
     if: ${{ needs.check_src.outputs.any_changed == 'true' || needs.check_workflow.outputs.any_changed == 'true' }}
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: revision

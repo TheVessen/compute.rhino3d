@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.16] - 2024-11-07
+
+### Fixed
+
+- Fixed a bug where the /launch endpoint would return a NullReference exception.
+- Added a line to the ComputeChildren.cs to clear the startInfo environmentVariable for "ASPNETCORE_HOSTINGSTARTUPASSEMBLIES" when Rhino.Compute starts up the child process Compute.Geometry. This was causing issues while debugging in newer version of Visual Studio.
+- Fixed a bug where the ComputeRecursionLevel property was not always being set.
+
+## [0.16.15] - 2024-11-07
+
+### Fixed
+
+- Fixed a bug where system directory paths were not being parsed correctly as a command line argument.
+
+## [0.16.14] - 2024-10-30
+
+### Fixed
+
+- Minor bug fixes. Fixed a bug where the open file icon shown in the Set Definition dialog was blurry.
+
 ## [0.16.13] - 2024-08-29
 
 ### Fixed

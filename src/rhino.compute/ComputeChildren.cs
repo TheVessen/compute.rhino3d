@@ -190,6 +190,7 @@ namespace rhino.compute
             }
 
             var startInfo = new ProcessStartInfo(pathToCompute);
+            startInfo.EnvironmentVariables["ASPNETCORE_HOSTINGSTARTUPASSEMBLIES"] = ""; //required for debugging compute.geometry via Visual Studio
             var rhinoProcess = Process.GetCurrentProcess();
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
             string commandLineArgs = $"-port:{port} -childof:{rhinoProcess.Id}";

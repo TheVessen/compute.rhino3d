@@ -81,11 +81,8 @@ namespace compute.geometry
         {
             for (int i = 0; i < args.Length; i++)
             {
-                string[] items = args[i].Split(':');
-                if (items == null || items.Length != 2)
-                    continue;
-                string key = items[0].ToLowerInvariant().TrimStart('-');
-                string value = items[1];
+                SplitArg(args[i], out string key, out string value);
+
                 switch (key)
                 {
                     case "port":
@@ -125,6 +122,23 @@ namespace compute.geometry
                 }
             }
         }
+
+        static void SplitArg(string arg, out string key, out string value)
+        {
+            key = arg;
+            value = string.Empty;
+
+            int i = arg.IndexOf(":");
+            if (i > 0)
+            {
+                key = arg.Substring(0, i);
+                value = arg.Substring(i + 1, arg.Length - key.Length - 1);
+                
+                // cleanup key, value
+                key = key.ToLowerInvariant().TrimStart('-');
+            }
+        }
+
         private static void LogVersions()
         {
             string compute_version = null, rhino_version = null;

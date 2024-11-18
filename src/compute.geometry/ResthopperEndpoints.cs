@@ -27,38 +27,6 @@ namespace compute.geometry
             app.MapGet("/io", GetIoNames);
         }
 
-        public static GH_Archive ArchiveFromUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-                return null;
-
-            byte[] byteArray = null;
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-            request.AutomaticDecompression = DecompressionMethods.GZip;
-            using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-            using (var stream = response.GetResponseStream())
-            using (var memStream = new MemoryStream())
-            {
-                stream.CopyTo(memStream);
-                byteArray = memStream.ToArray();
-            }
-
-            try
-            {
-                var byteArchive = new GH_Archive();
-                if (byteArchive.Deserialize_Binary(byteArray))
-                    return byteArchive;
-            }
-            catch (Exception) { }
-
-            var grasshopperXml = StripBom(System.Text.Encoding.UTF8.GetString(byteArray));
-            var xmlArchive = new GH_Archive();
-            if (xmlArchive.Deserialize_Xml(grasshopperXml))
-                return xmlArchive;
-
-            return null;
-        }
-
         static void SetDefaultTolerances(double absoluteTolerance, double angleToleranceDegrees)
         {
             if (absoluteTolerance <= 0 || angleToleranceDegrees <= 0)
