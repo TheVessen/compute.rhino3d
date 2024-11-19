@@ -50,5 +50,10 @@ src/.idea/.idea.compute/.idea/workspace.xml
 **/*/.idea/
 src/.idea/**/*
 
-src/.idea/.idea.compute/.idea/workspace.xml
-src/.idea/.idea.compute/.idea/workspace.xml
+# Rider-specific files
+.idea/
+*.sln.iml
+*.sln.DotSettings
+*.sln.DotSettings.user
+*.csproj.DotSettings
+*.csproj.DotSettings.user
