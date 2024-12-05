@@ -67,7 +67,7 @@ jobs:
         run: dotnet publish src/compute.sln -c Release
       - name: artifacts
         if: github.ref == 'refs/heads/Compute8'
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           path: src/dist
           name: rhino.compute
