@@ -57,3 +57,6 @@ src/.idea/**/*
 *.sln.DotSettings.user
 *.csproj.DotSettings
 *.csproj.DotSettings.user
+.idea/**/*
+src/.idea/.idea.compute/.idea/projectSettingsUpdater.xml
+src/.idea/.idea.compute/.idea/workspace.xml
