@@ -4,7 +4,7 @@
     <AssemblyName>compute.geometry</AssemblyName>
     <OutputType>Exe</OutputType>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <RuntimeFrameworkVersion>7.0.10</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion>7.0.0</RuntimeFrameworkVersion>
     <RollForward>LatestMinor</RollForward>
     <UseWpf>True</UseWpf>
     <UseWindowsForms>True</UseWindowsForms>
