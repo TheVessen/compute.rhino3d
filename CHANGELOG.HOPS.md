@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.18] - 2025-01-06
+
+### Fixed
+
+- Fixed a bug where custom endpoints which pointed to functions which did not contain an argument would result in a duplicate. When this endpoint would be called, the duplicate would cause an AmbiguousMatchException to be thrown.
+- Changed the `RollForward` value in both the Rhino.Compute and Compute.Geometry csproj files to use `Major` instead of `LatestMinor`. This change means that these projects will use .NET 7 if the framework is installed, but if not it will roll forward to .NET 8 or 9 (which ever is the latest major version installed on the machine). Read more at https://learn.microsoft.com/en-us/dotnet/core/versions/selection.
+
+## [0.16.17] - 2024-11-19
+
+### Fixed
+
+- Startup.cs now loads the Commands.rhp so that certain features such as the gltf exporter will work properly inside rhino.compute. This is a temporary solution until the gltf exporter code is moved into Rhinocommon or Rhino.UI.
+
 ## [0.16.16] - 2024-11-07
 
 ### Fixed
