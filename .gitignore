@@ -60,3 +60,4 @@ src/.idea/**/*
 .idea/**/*
 src/.idea/.idea.compute/.idea/projectSettingsUpdater.xml
 src/.idea/.idea.compute/.idea/workspace.xml
+**/*/.idea
