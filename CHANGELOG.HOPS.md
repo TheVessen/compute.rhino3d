@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.23] - 2025-03-04
+
+### Added
+
+- Downgrading Serilog references to the minimum necessary in order to maintain compatability with Revit in the Hops project.
+
+## [0.16.22] - 2025-02-24
+
+### Added
+
+- The Hops component will now display the Minimum and Maximum values on the input parameter tooltip. In addition, the error message that is displayed if a user exceeds the Minimum or Maximum bounds will also indicate what the numeric bounds are for further clarification.
+
+## [0.16.21] - 2025-02-21
+
+### Added
+
+- Added more detailed logging information to capture the idlespan value and the shutdown procedure. If the environment variable RHINO_COMPUTE_DEBUG is set to True, then you should see additional information regarding the registered idlespan value and how it is used during the shutdown procedure.
+
+## [0.16.20] - 2025-02-07
+
+### Fixed
+
+- Logging has been refactored in all three projects (ie. Rhino.Compute, Compute.Geometry, and Hops) to be more consistent and robust. Setting an environment variable RHINO_COMPUTE_DEBUG to True (default is False) will now add much more verbose logging information to both the console and file outputs. A log output has also been added to the Hops project to receive logging information relevant to the Hops component. You can customize where these logs are saved by setting an environment variable RHINO_COMPUTE_LOG_PATH with the directory path for the log files. If this variable is left blank, the default log path will be C:\Users\UserName\AppData\Local\Temp\Compute\Logs.
+
+## [0.16.19] - 2025-01-27
+
+### Added
+
+- It is now possible for Rhino.Compute to create a headless document to be used during the solve routine. To use this feature, create a local environment variable called RHINO_COMPUTE_CREATE_HEADLESS_DOC.The value of this variable can be set to either true or false with false being the default. Each time the GrasshopperSolveHelper method of the ResthopperEndpointsModule is invoked, it checks whether Config.CreateHeadlessDoc is set to true. If it is, a brand new headless document is instantiated with tolerances and units determined by the input object. This feature is useful for third party plugins which may make calls to the Rhino Document to retrieve properties such as tolerances or units. Prior to this feature, these requests would result in an error. Now, a plugin may utilize this information for calculations.
+
 ## [0.16.18] - 2025-01-06
 
 ### Fixed

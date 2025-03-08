@@ -45,6 +45,10 @@ namespace compute.geometry
 
             RhinoInside.Resolver.LoadRhino();
             LogVersions();
+
+            if (Config.CreateHeadlessDoc)
+                Log.Information("Compute to use headless Rhino documents");
+
             var host = Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
@@ -88,7 +92,7 @@ namespace compute.geometry
                     case "port":
                         {
                             Config.LocalhostPort = int.Parse(value);
-                            Log.Information($"Parsed port = {Config.LocalhostPort}");
+                            //Log.Information($"Parsed port = {Config.LocalhostPort}");
                         }
                         break;
                     case "address":
@@ -111,6 +115,7 @@ namespace compute.geometry
                     case "idlespan":
                         {
                             int span = int.Parse(value);
+                            Log.Debug($"Registering idle span value of {span} seconds");
                             Shutdown.RegisterIdleSpan(span);
                         }
                         break;
