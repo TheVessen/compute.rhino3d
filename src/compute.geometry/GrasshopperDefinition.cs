@@ -242,6 +242,17 @@ namespace compute.geometry
                 }
                 
                 //VektorNode custom outputs
+                
+                
+                // if (className.StartsWith("_"))
+                // {
+                //     var dataComponent = obj as GH_Component;
+                //     IGH_Param param = dataComponent.Params.Output[0];
+                //     param.NickName = "Data_" + param.InstanceGuid;
+                //     //Set spectial property for exposing JSON data
+                //     AddOutput(param, param.NickName, ref rc);
+                // }
+                
                 //Endpoint for exposing JSON data
                 if (className.StartsWith("ExportJsonData"))
                 {
@@ -834,7 +845,7 @@ namespace compute.geometry
             }
 
             if (outputSchema.Values.Count < 1)
-                throw new System.Exceptions.PayAttentionException("Looks like you've missed something..."); // TODO
+                throw new System.Exceptions.PayAttentionException("Looks like you've missed something... No outputs found"); // TODO
 
             // Setting warnings and errors to null ever so slightly shrinks down the json sent back to the client
             if (outputSchema.Warnings.Count < 1)

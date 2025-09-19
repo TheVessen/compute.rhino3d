@@ -71,10 +71,10 @@ namespace compute.geometry
             Serilog.Log.Debug($"Received a {httpType} {ctx.Request.Method} request to the {endpoint} endpoint");
 
             // load grasshopper file
-            GrasshopperDefinition definition = GrasshopperDefinition.FromUrl(input.Pointer, true);
+            GrasshopperDefinition definition = GrasshopperDefinition.FromUrl(input.Pointer, input.CacheSolve);
             if (definition == null && !string.IsNullOrWhiteSpace(input.Algo))
             {
-                definition = GrasshopperDefinition.FromBase64String(input.Algo, true);
+                definition = GrasshopperDefinition.FromBase64String(input.Algo, input.CacheSolve);
             }
             if (definition == null)
             {
