@@ -870,6 +870,8 @@ namespace compute.geometry
                     if (goo == null)
                         continue;
 
+                    var t = goo.GetType().FullName;
+
                     switch (goo)
                     {
                         case GH_Boolean ghValue:
@@ -1046,6 +1048,23 @@ namespace compute.geometry
                                 resthopperObjectList.Add(GetResthopperObject<Centermark>(rhValue, rhinoVersion));
                             }
                             break;
+                        // Display Oject for ThreeJS
+                        case IGH_Goo gooObj when gooObj.GetType().FullName == "ThreeDisplayGoo":
+                        {
+                            // Use reflection to get the Value property
+                            var valueProp = gooObj.GetType().GetProperty("Value");
+                            var value = valueProp?.GetValue(gooObj);
+                            resthopperObjectList.Add(GetResthopperObject<object>(value, rhinoVersion));
+                            break;
+                        }
+                        case IGH_Goo gooObj when gooObj.GetType().FullName == "GHHeadless.Components.Exporters.FileDataGoo":
+                        {
+                            // Use reflection to get the Value property
+                            var valueProp = gooObj.GetType().GetProperty("Value");
+                            var value = valueProp?.GetValue(gooObj);
+                            resthopperObjectList.Add(GetResthopperObject<object>(value, rhinoVersion));
+                            break;
+                        }
                     }
                 }
                 // preserve paths when returning data
