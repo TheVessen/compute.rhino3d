@@ -1049,7 +1049,7 @@ namespace compute.geometry
                             }
                             break;
                         // Display Oject for ThreeJS
-                        case IGH_Goo gooObj when gooObj.GetType().FullName == "ThreeDisplayGoo":
+                        case IGH_Goo gooObj when gooObj.GetType().FullName == "Compuceraptor.Components.Display.ThreeDisplayGoo":
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
@@ -1057,7 +1057,7 @@ namespace compute.geometry
                             resthopperObjectList.Add(GetResthopperObject<object>(value, rhinoVersion));
                             break;
                         }
-                        case IGH_Goo gooObj when gooObj.GetType().FullName == "GHHeadless.Components.Exporters.FileDataGoo":
+                        case IGH_Goo gooObj when gooObj.GetType().FullName == "Compuceraptor.Components.IO.FileDataGoo":
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
