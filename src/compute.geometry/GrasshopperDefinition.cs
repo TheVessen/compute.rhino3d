@@ -268,7 +268,6 @@ namespace compute.geometry
                 {
                     var currentDisplayer = obj as GH_Component;
                     IGH_Param param = currentDisplayer.Params.Output[0];
-                    param.NickName = "Display_" + param.InstanceGuid;
                     AddOutput(param, param.NickName, ref rc);
                 }
 
