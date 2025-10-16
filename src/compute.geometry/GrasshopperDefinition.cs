@@ -170,7 +170,7 @@ namespace compute.geometry
         {
             if (rc._output.ContainsKey(name))
             {
-                string msg = "Multiple output parameters with the same name were detected. Parameter names must be unique.";
+                string msg = $"Multiple output parameters with the same name '{name}' were detected. Parameter names must be unique.";
                 rc.HasErrors = true;
                 rc.ErrorMessages.Add(msg);
                 LogError(msg);
@@ -178,6 +178,7 @@ namespace compute.geometry
             else
                 rc._output[name] = param;
         }
+
 
         private static GrasshopperDefinition Construct(GH_Archive archive)
         {
@@ -264,12 +265,12 @@ namespace compute.geometry
                 }
 
                 //Endpoints for WebDisplay
-                if (className == "WebDisplay")
-                {
-                    var currentDisplayer = obj as GH_Component;
-                    IGH_Param param = currentDisplayer.Params.Output[0];
-                    AddOutput(param, param.NickName, ref rc);
-                }
+                // if (className == "WebDisplay")
+                // {
+                //     var currentDisplayer = obj as GH_Component;
+                //     IGH_Param param = currentDisplayer.Params.Output[0];
+                //     AddOutput(param, param.NickName, ref rc);
+                // }
 
                 var group = obj as GH_Group;
                 if (group == null)
