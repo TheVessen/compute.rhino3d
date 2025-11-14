@@ -527,6 +527,25 @@ namespace compute.geometry
                                     .Invoke(contextualParameter, new object[] { inputTree });
                             }
                                 break;
+                            case "ValueList":
+                            {
+                                // Use AssignContextualData instead, which accepts IEnumerable (works with List<GH_String>)
+                                var stringList = new List<object>();
+                                foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                {
+                                    for (int i = 0; i < entree.Value.Count; i++)
+                                    {
+                                        ResthopperObject restobj = entree.Value[i];
+                                        // Use the data directly - it should already be a plain string value like "0", "1", "2"
+                                        stringList.Add(new GH_String(restobj.Data));
+                                    }
+                                }
+
+                                contextualParameter.GetType()
+                                    .GetMethod("AssignContextualData")?
+                                    .Invoke(contextualParameter, new object[] { stringList });
+                            }
+                                break;
                             case "Geometry":
                             {
                                 Grasshopper.DataTree<IGH_GeometricGoo> inputTree =
@@ -1227,7 +1246,9 @@ namespace compute.geometry
                     Default = i.Value.GetDefault(),
                     Minimum = i.Value.GetMinimum(),
                     Maximum = i.Value.GetMaximum(),
-                    GroupName = i.Value.GetGroupName()
+                    GroupName = i.Value.GetGroupName(),
+                    Values = i.Value.GetValues(),
+                    
                 };
                 if (_singularComponent != null)
                 {
@@ -1420,6 +1441,19 @@ namespace compute.geometry
 
             public object GetDefault()
             {
+                // First check if this is a contextual parameter with a custom default value
+                if (Param is IGH_ContextualParameter contextualParam)
+                {
+                    var method = contextualParam.GetType().GetMethod("GetDefaultValue");
+                    if (method != null)
+                    {
+                        var result = method.Invoke(contextualParam, null);
+                        if (result != null)
+                            return result; // Return the string directly
+                    }
+                }
+
+                // Fall back to original behavior (serialize data tree)
                 return _default;
             }
 
@@ -1530,6 +1564,23 @@ namespace compute.geometry
                 var hierarchy = BuildGroupHierarchy(allGroupsContainingParam);
 
                 return string.Join("::", hierarchy.Select(g => g.NickName));
+            }
+            
+            public Dictionary<string, string> GetValues()
+            {
+                if (Param is IGH_ContextualParameter contextualParam)
+                {
+                    var pType = contextualParam.GetType();
+                    var props = pType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                    var valuesInfo = props.FirstOrDefault(x => x.Name == "Values");
+                    if (valuesInfo != null)
+                    {
+                        var val = valuesInfo.GetValue(contextualParam, null);
+                        if (val is Dictionary<string, string> dict)
+                            return dict;
+                    }
+                }
+                return null;
             }
 
             /// <summary>
