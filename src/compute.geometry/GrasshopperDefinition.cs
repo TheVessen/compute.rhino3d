@@ -529,15 +529,21 @@ namespace compute.geometry
                                 break;
                             case "ValueList":
                             {
-                                // Use AssignContextualData instead, which accepts IEnumerable (works with List<GH_String>)
-                                var stringList = new List<object>();
+                                // Ensure stored list items are populated before assigning data
+                                var storeMethod = contextualParameter.GetType().GetMethod("StoreValueListData");
+                                if (storeMethod != null)
+                                {
+                                    storeMethod.Invoke(contextualParameter, null);
+                                }
+
+                                var stringList = new List<string>();
                                 foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
                                 {
                                     for (int i = 0; i < entree.Value.Count; i++)
                                     {
                                         ResthopperObject restobj = entree.Value[i];
-                                        // Use the data directly - it should already be a plain string value like "0", "1", "2"
-                                        stringList.Add(new GH_String(restobj.Data));
+                                        string data = restobj.Data.Trim('"');
+                                        stringList.Add(data);
                                     }
                                 }
 
@@ -546,6 +552,7 @@ namespace compute.geometry
                                     .Invoke(contextualParameter, new object[] { stringList });
                             }
                                 break;
+
                             case "Geometry":
                             {
                                 Grasshopper.DataTree<IGH_GeometricGoo> inputTree =
@@ -1248,7 +1255,6 @@ namespace compute.geometry
                     Maximum = i.Value.GetMaximum(),
                     GroupName = i.Value.GetGroupName(),
                     Values = i.Value.GetValues(),
-                    
                 };
                 if (_singularComponent != null)
                 {
@@ -1565,7 +1571,7 @@ namespace compute.geometry
 
                 return string.Join("::", hierarchy.Select(g => g.NickName));
             }
-            
+
             public Dictionary<string, string> GetValues()
             {
                 if (Param is IGH_ContextualParameter contextualParam)
@@ -1580,6 +1586,7 @@ namespace compute.geometry
                             return dict;
                     }
                 }
+
                 return null;
             }
 
