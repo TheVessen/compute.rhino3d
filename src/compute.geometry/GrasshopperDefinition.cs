@@ -529,13 +529,6 @@ namespace compute.geometry
                                 break;
                             case "ValueList":
                             {
-                                // Ensure stored list items are populated before assigning data
-                                var storeMethod = contextualParameter.GetType().GetMethod("StoreValueListData");
-                                if (storeMethod != null)
-                                {
-                                    storeMethod.Invoke(contextualParameter, null);
-                                }
-
                                 var stringList = new List<string>();
                                 foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
                                 {
@@ -547,9 +540,14 @@ namespace compute.geometry
                                     }
                                 }
 
+                                // Set contextual data FIRST
                                 contextualParameter.GetType()
                                     .GetMethod("AssignContextualData")?
                                     .Invoke(contextualParameter, new object[] { stringList });
+
+                                // Then clear and expire
+                                inputGroup.Param.VolatileData.Clear();
+                                inputGroup.Param.ExpireSolution(false);
                             }
                                 break;
 
