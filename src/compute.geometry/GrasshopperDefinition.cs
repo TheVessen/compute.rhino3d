@@ -954,7 +954,7 @@ namespace compute.geometry
                     if (goo == null)
                         continue;
 
-                    var t = goo.GetType().FullName;
+                    var t = goo.GetType().Name;
 
                     switch (goo)
                     {
@@ -1133,9 +1133,10 @@ namespace compute.geometry
                             resthopperObjectList.Add(GetResthopperObject<Centermark>(rhValue, rhinoVersion));
                         }
                             break;
+                        
                         // Display Oject for ThreeJS
                         case IGH_Goo gooObj when gooObj.GetType().FullName ==
-                                                 "Compuceraptor.Components.Display.ThreeDisplayGoo":
+                                                 "ComputeBuilder.Display.ThreeDisplayGoo":
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
@@ -1143,7 +1144,7 @@ namespace compute.geometry
                             resthopperObjectList.Add(GetResthopperObject<object>(value, rhinoVersion));
                             break;
                         }
-                        case IGH_Goo gooObj when gooObj.GetType().FullName == "Compuceraptor.Components.IO.FileDataGoo":
+                        case IGH_Goo gooObj when gooObj.GetType().FullName == "ComputeBuilder.Components.IO.FileDataGoo":
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
