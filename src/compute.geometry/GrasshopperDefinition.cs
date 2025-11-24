@@ -1255,7 +1255,7 @@ namespace compute.geometry
                     Maximum = i.Value.GetMaximum(),
                     GroupName = i.Value.GetGroupName(),
                     Values = i.Value.GetValues(),
-                    ParamId = i.Value.Param.InstanceGuid.ToString()
+                    Id = i.Value.Param.InstanceGuid.ToString()
                 };
                 if (_singularComponent != null)
                 {
@@ -1272,7 +1272,7 @@ namespace compute.geometry
             foreach (var o in sortedOutputs)
             {
                 outputNames.Add(o.Key);
-                outputs.Add(new IoParamSchema { Name = o.Key, ParamType = o.Value.TypeName, ParamId = o.Value.InstanceGuid.ToString() });
+                outputs.Add(new IoParamSchema { Name = o.Key, ParamType = o.Value.TypeName, Id = o.Value.InstanceGuid.ToString() });
             }
 
             string description = _singularComponent == null

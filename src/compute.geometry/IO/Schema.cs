@@ -9,133 +9,176 @@ namespace Resthopper.IO
     {
         public Schema() {}
 
-        [JsonProperty(PropertyName = "absolutetolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("absolutetolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public double AbsoluteTolerance { get; set; } = 0;
 
-        [JsonProperty(PropertyName = "angletolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("angletolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public double AngleTolerance { get; set; } = 0;
 
-        [JsonProperty(PropertyName = "modelunits")]
+        [JsonProperty("modelunits")]
         public string ModelUnits { get; set; } = Rhino.UnitSystem.Millimeters.ToString();
 
-        // Rhino version of data to be serialized and returned to the client
-        [JsonProperty(PropertyName = "dataversion")]
+        [JsonProperty("dataversion")]
         public int DataVersion { get; set; } = 7;
 
-        [JsonProperty(PropertyName = "algo")]
+        [JsonProperty("algo")]
         public string Algo { get; set; }
 
-        [JsonProperty(PropertyName = "filename")]
+        [JsonProperty("filename")]
         public string FileName { get; set; }
 
-        [JsonProperty(PropertyName = "pointer")]
+        [JsonProperty("pointer")]
         public string Pointer { get; set; }
 
-        // If true on input, the solve results are cached based on this schema.
-        // When true the cache is searched for already computed results and used
-        [JsonProperty(PropertyName = "cachesolve")]
+        [JsonProperty("cachesolve")]
         public bool CacheSolve { get; set; } = false;
 
-        // Used for nested calls
-        [JsonProperty(PropertyName = "recursionlevel", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("recursionlevel", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public int RecursionLevel { get; set; } = 0;
 
-        [JsonProperty(PropertyName = "values")]
+        [JsonProperty("values")]
         public List<DataTree<ResthopperObject>> Values { get; set; } = new List<DataTree<ResthopperObject>>();
 
-        // Return warnings from GH
-        [JsonProperty(PropertyName = "warnings", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("warnings", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public List<string> Warnings { get; set; } = new List<string>();
 
-        // Return errors from GH
-        [JsonProperty(PropertyName = "errors", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("errors", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public List<string> Errors { get; set; } = new List<string>();
     }
 
     public class IoQuerySchema
     {
-        [JsonProperty(PropertyName = "requestedFile")]
+        [JsonProperty("requestedFile")]
         public string RequestedFile { get; set; }
-
     }
 
     public class IoParamSchema
     {
+        [JsonProperty("name")]
         public string Name { get; set; }
+
+        [JsonProperty("nickname")]
         public string Nickname { get; set; }
+
+        [JsonProperty("paramtype")]
         public string ParamType { get; set; }
-        public string ParamId { get; set; }
+
+        [JsonProperty("id")]
+        public string Id { get; set; }
     }
 
     public class InputParamSchema : IoParamSchema
     {
+        [JsonProperty("description")]
         public string Description { get; set; }
+
+        [JsonProperty("atleast")]
         public int AtLeast { get; set; } = 1;
+
+        [JsonProperty("atmost")]
         public int AtMost { get; set; } = int.MaxValue;
+
+        [JsonProperty("treeaccess")]
         public bool TreeAccess { get; set; } = false;
+
+        [JsonProperty("default")]
         public object Default { get; set; } = null;
+
+        [JsonProperty("minimum")]
         public object Minimum { get; set; } = null;
+
+        [JsonProperty("maximum")]
         public object Maximum { get; set; } = null;
+
+        [JsonProperty("groupname")]
         public string GroupName { get; set; } = null;
+
+        [JsonProperty("values")]
         public Dictionary<string, string> Values { get; set; } = null;
     }
 
     public class IoResponseSchema
     {
+        [JsonProperty("description")]
         public string Description { get; set; }
+
+        [JsonProperty("filename")]
         public string FileName { get; set; }
+
+        [JsonProperty("cachekey")]
         public string CacheKey { get; set; }
+
+        [JsonProperty("inputnames")]
         public List<string> InputNames { get; set; }
+
+        [JsonProperty("outputnames")]
         public List<string> OutputNames { get; set; }
+
+        [JsonProperty("icon")]
         public string Icon { get; set; }
+
+        [JsonProperty("inputs")]
         public List<InputParamSchema> Inputs { get; set; }
+
+        [JsonProperty("outputs")]
         public List<IoParamSchema> Outputs { get; set; }
+
+        [JsonProperty("warnings")]
         public List<string> Warnings { get; set; } = new List<string>();
+
+        [JsonProperty("errors")]
         public List<string> Errors { get; set; } = new List<string>();
     }
 
     public class HTTPRecord
     {
-        public HTTPRecord()
-        {
+        public HTTPRecord() {}
 
-        }
+        [JsonProperty("iorequest")]
         public string IORequest { get; set; }
+
+        [JsonProperty("ioresponse")]
         public string IOResponse { get; set; }
+
+        [JsonProperty("solverequest")]
         public string SolveRequest { get; set; }
+
+        [JsonProperty("solveresponse")]
         public string SolveResponse { get; set; }
+
+        [JsonProperty("schema")]
         public Schema Schema { get; set; }
+
+        [JsonProperty("ioresponseschema")]
         public IoResponseSchema IOResponseSchema { get; set; }
     }
 
     public class ResthopperObject : IEquatable<ResthopperObject>
     {
-        [JsonProperty(PropertyName = "type")]
+        [JsonProperty("type")]
         public string Type { get; set; }
 
-        [JsonProperty(PropertyName = "data")]
+        [JsonProperty("data")]
         public string Data { get; set; }
 
         [JsonIgnore]
         public object ResolvedData { get; set; }
 
         [JsonConstructor]
-        public ResthopperObject()
-        {
-        }
+        public ResthopperObject() {}
 
         public ResthopperObject(object obj)
         {
-            if(obj is GeometryBase geometry)
+            if (obj is GeometryBase geometry)
             {
-                Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = 7});
+                Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = 7 });
             }
             else
             {
 #if COMPUTE_CORE
                 Data = JsonConvert.SerializeObject(obj, compute.geometry.GeometryResolver.Settings);
 #else
-                Data = JsonConvert.SerializeObject(obj);//, compute.geometry.GeometryResolver.Settings);
+                Data = JsonConvert.SerializeObject(obj);
 #endif
             }
             Type = obj.GetType().FullName;
