@@ -922,7 +922,7 @@ namespace compute.geometry
                     continue;
 
                 Resthopper.IO.DataTree<ResthopperObject> outputTree =
-                    SerializeDataTree(param.VolatileData,param.InstanceGuid, kvp.Key, rhinoVersion) as
+                    SerializeDataTree(param.VolatileData,param.Attributes.Parent.InstanceGuid, kvp.Key, rhinoVersion) as
                         Resthopper.IO.DataTree<ResthopperObject>;
                 
                 outputSchema.Values.Add(outputTree);
@@ -1136,8 +1136,8 @@ namespace compute.geometry
                             break;
                         
                         // Display Oject for ThreeJS
-                        case IGH_Goo gooObj when gooObj.GetType().FullName ==
-                                                 "ComputeBuilder.Display.ThreeDisplayGoo":
+                        case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
+                                                 gooObj.GetType().FullName.IndexOf("ThreeDisplayGoo", StringComparison.OrdinalIgnoreCase) >= 0:
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
@@ -1145,7 +1145,8 @@ namespace compute.geometry
                             resthopperObjectList.Add(GetResthopperObject<object>(value,paramId, rhinoVersion));
                             break;
                         }
-                        case IGH_Goo gooObj when gooObj.GetType().FullName == "ComputeBuilder.Components.IO.FileDataGoo":
+                        case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
+                                                 gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0:
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
@@ -1375,7 +1376,7 @@ namespace compute.geometry
             var v = (T)goo;
             ResthopperObject rhObj = new ResthopperObject();
             rhObj.Type = goo.GetType().FullName;
-            rhObj.ParamId = paramId;
+            rhObj.Id = paramId;
 
             if (v is GeometryBase geometry)
                 rhObj.Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = rhinoVerion });

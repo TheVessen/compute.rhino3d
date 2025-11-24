@@ -9,16 +9,16 @@ namespace Resthopper.IO
     {
         public Schema() {}
 
-        [JsonProperty("absolutetolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("absoluteTolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public double AbsoluteTolerance { get; set; } = 0;
 
-        [JsonProperty("angletolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        [JsonProperty("angleTolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public double AngleTolerance { get; set; } = 0;
 
-        [JsonProperty("modelunits")]
+        [JsonProperty("modelUnits")]
         public string ModelUnits { get; set; } = Rhino.UnitSystem.Millimeters.ToString();
 
-        [JsonProperty("dataversion")]
+        [JsonProperty("dataVersion")]
         public int DataVersion { get; set; } = 7;
 
         [JsonProperty("algo")]
@@ -30,7 +30,7 @@ namespace Resthopper.IO
         [JsonProperty("pointer")]
         public string Pointer { get; set; }
 
-        [JsonProperty("cachesolve")]
+        [JsonProperty("cacheSolve")]
         public bool CacheSolve { get; set; } = false;
 
         [JsonProperty("recursionlevel", DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -60,7 +60,7 @@ namespace Resthopper.IO
         [JsonProperty("nickname")]
         public string Nickname { get; set; }
 
-        [JsonProperty("paramtype")]
+        [JsonProperty("paramType")]
         public string ParamType { get; set; }
 
         [JsonProperty("id")]
@@ -72,13 +72,13 @@ namespace Resthopper.IO
         [JsonProperty("description")]
         public string Description { get; set; }
 
-        [JsonProperty("atleast")]
+        [JsonProperty("atLeast")]
         public int AtLeast { get; set; } = 1;
 
-        [JsonProperty("atmost")]
+        [JsonProperty("atMost")]
         public int AtMost { get; set; } = int.MaxValue;
 
-        [JsonProperty("treeaccess")]
+        [JsonProperty("treeAccess")]
         public bool TreeAccess { get; set; } = false;
 
         [JsonProperty("default")]
@@ -90,7 +90,7 @@ namespace Resthopper.IO
         [JsonProperty("maximum")]
         public object Maximum { get; set; } = null;
 
-        [JsonProperty("groupname")]
+        [JsonProperty("groupName")]
         public string GroupName { get; set; } = null;
 
         [JsonProperty("values")]
@@ -164,8 +164,8 @@ namespace Resthopper.IO
         [JsonIgnore]
         public object ResolvedData { get; set; }
         
-        [JsonProperty(PropertyName = "paramId")]
-        public Guid ParamId { get; set; }
+        [JsonProperty(PropertyName = "id")]
+        public Guid Id { get; set; }
 
         [JsonConstructor]
         public ResthopperObject() {}
