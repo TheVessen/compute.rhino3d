@@ -163,6 +163,9 @@ namespace Resthopper.IO
 
         [JsonIgnore]
         public object ResolvedData { get; set; }
+        
+        [JsonProperty(PropertyName = "paramId")]
+        public Guid ParamId { get; set; }
 
         [JsonConstructor]
         public ResthopperObject() {}
