@@ -227,8 +227,8 @@ namespace compute.geometry
                 IGH_ContextualParameter contextualParam = obj as IGH_ContextualParameter;
                 if (contextualParam != null)
                 {
-                    IGH_Param param = obj as IGH_Param;
-                    if (param != null)
+                    IGH_Param param = obj as IGH_Param;          
+                    if (param != null && !param.Locked)
                     {
                         AddInput(param, param.NickName, ref rc);
                     }
@@ -236,21 +236,26 @@ namespace compute.geometry
                     continue;
                 }
 
-
                 Type objectClass = obj.GetType();
                 var className = objectClass.Name;
                 if (className == "ContextBakeComponent")
                 {
                     var contextBaker = obj as GH_Component;
-                    IGH_Param param = contextBaker.Params.Input[0];
-                    AddOutput(param, param.NickName, ref rc);
+                    if (contextBaker != null && !contextBaker.Locked)
+                    {
+                        IGH_Param param = contextBaker.Params.Input[0];
+                        AddOutput(param, param.NickName, ref rc);
+                    }
                 }
 
                 if (className == "ContextPrintComponent")
                 {
                     var contextPrinter = obj as GH_Component;
-                    IGH_Param param = contextPrinter.Params.Input[0];
-                    AddOutput(param, param.NickName, ref rc);
+                    if (contextPrinter != null && !contextPrinter.Locked)
+                    {
+                        IGH_Param param = contextPrinter.Params.Input[0];
+                        AddOutput(param, param.NickName, ref rc);
+                    }  
                 }
 
                 //VektorNode custom outputs
@@ -292,7 +297,7 @@ namespace compute.geometry
                 if (nickname.Contains("RH_IN") && groupObjects.Count > 0)
                 {
                     var param = groupObjects[0] as IGH_Param;
-                    if (param != null)
+                    if (param != null && !param.Locked)
                     {
                         AddInput(param, nickname, ref rc);
                     }

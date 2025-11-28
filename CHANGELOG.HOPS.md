@@ -1,8 +1,28 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.16.28] - 2025-11-05
+
+### Added
+
+- New environment variable
+  - `RHINO_COMPUTE_LOAD_GRASSHOPPER` - This variable controls whether or not the Grasshopper plugin is loaded (defaults to `True` for backward compatibility). Setting this to `False` will speed up the loading process, but you will not be able to solve Grasshopper definitions using Rhino.Compute. Instead, you will only be able to access standard SDK functions and/or any custom endpoints that you may have added through Rhino plugins.
+- New command line arguments
+  - `--load-grasshopper` `<true|false>` - Enable/disable Grasshopper plugin loading
+  - `--max-request-size` `<bytes>` - Set the maximum acceptable request body size
+  - `--apikey` `<key>` - Set an API key for authentication
+  - `--timeout` `<seconds>` - Set the request timeout limit
+  - `--create-headless-doc` `<true/false>` - Enable/disable whether to create a new headless Rhino document upon receiving a new request
+
+## [0.16.27] - 2025-09-09
+
+### Fixed
+
+- Disabled parameters (i.e. Contextual Get Parameters, Context Bake/Print, RH_IN and/or RH_OUT groups) are now skipped during the IO search process.
 
 ## [0.16.26] - 2025-07-31
 
@@ -178,8 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Two endpoints to return information about the plugins installed on the machine running the rhino.compute server.
-    - /plugins/rhino/installed - will return a sorted dictionary of Rhino plugins which are installed.
-    - /plugins/gh/installed - will return a sorted dictionary of Grasshopper plugins which are installed.
+  - /plugins/rhino/installed - will return a sorted dictionary of Rhino plugins which are installed.
+  - /plugins/gh/installed - will return a sorted dictionary of Grasshopper plugins which are installed.
 
 ### Fixed
 
@@ -229,7 +249,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- DataTrees are now supported in Rhino builds >= 7.19.22130.15001 and 8.0.22131.04306. All of the contextual getter components now have a menu item which lets you set whether you want that parameter to have DataTree access. When set to true, this setting will override the AtMost value which is what Hops uses for item or list access. The DataTree access setting has no effect on the GH Player command. 
+- DataTrees are now supported in Rhino builds >= 7.19.22130.15001 and 8.0.22131.04306. All of the contextual getter components now have a menu item which lets you set whether you want that parameter to have DataTree access. When set to true, this setting will override the AtMost value which is what Hops uses for item or list access. The DataTree access setting has no effect on the GH Player command.
 - The function manager is now available in Rhino for mac on builds >= 7.19.22126.15001 and 8.0.22126.04306. See the update below for hops build 0.13.1 for more information about how the function manager works.
 - The bootstrap script which is used when deploying Rhino.Compute for a production environment has been update to follow a two-step installation process (with a restart in between). The installation is largely the same, however a restart is now required to finish the installation of the IIS modules.
 
@@ -237,13 +257,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A bug was fixed if the Hops referenced file was not found. Now, if the referenced file is at least in the same folder as the Hops definition then it should find and load it upon opening the file.
 - An error would occur when exporting last HTTP request and/or response if more than one hops component was being used in a definition.
-- The Minimum and Maximum values on the contextual Get Number and Get Integer components are now used in Hops. If either of those values are set on the getter parameter and the input value exceeds that limit, an error will be thrown in Hops. 
+- The Minimum and Maximum values on the contextual Get Number and Get Integer components are now used in Hops. If either of those values are set on the getter parameter and the input value exceeds that limit, an error will be thrown in Hops.
 
 ## [0.13.1] - 2022-04-13
 
 ### Added
 
-- A function manager was added to the Hops preferenced UI. This interface allows you to add function sources (ie. local folder, localhost, and remote server locations). Once a valid source is added to the Hops preferences, a new menu item will be added to the Hops component. This menu item will enumerate valid functions (either grasshopper files or function endpoints). Right-clicking on a menu item will open the file while left-clicking will reference the file in the Hops component (ie. like setting the path). For  now, this feature is only available when running Grasshopper for Windows.
+- A function manager was added to the Hops preferenced UI. This interface allows you to add function sources (ie. local folder, localhost, and remote server locations). Once a valid source is added to the Hops preferences, a new menu item will be added to the Hops component. This menu item will enumerate valid functions (either grasshopper files or function endpoints). Right-clicking on a menu item will open the file while left-clicking will reference the file in the Hops component (ie. like setting the path). For now, this feature is only available when running Grasshopper for Windows.
 
 ### Fixed
 
@@ -255,17 +275,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The current document units (ie. feet, inches, millimeters, etc.) are now included as part of the API request from Hops.
 - The Hops component now displays an error message if:
-    - one or more inputs have the same name
-    - one or more outputs have the same name
-    - rhino.compute is missing a component. This would likely be caused if rhino.compute is running on a remote server and it is missing a 3rd party plugin.
+  - one or more inputs have the same name
+  - one or more outputs have the same name
+  - rhino.compute is missing a component. This would likely be caused if rhino.compute is running on a remote server and it is missing a 3rd party plugin.
 - An environment variable called `RHINO_COMPUTE_TIMEOUT` can now be set to configure the request timeout (in seconds) for the HttpClient in the reverse proxy module.
 - The bootstrap script (for deployment to production environments) has been updated to handle the installation of 3rd party plugins. The script will now create a new local user account, called `RhinoComputeUser` and auto-generate a unique password. It will add this user to the RDP group and assign this identity to the RhinoComputeAppPool which is what IIS uses to run rhino.compute.exe. The script will print the username and password at the end for your records. To install 3rd party plugins after the bootstrap script has been run, follow these steps:
-    1. Log into your VM using these credentials (write these down)
-        - User Name: RhinoComputeUser
-        - Password: #This will be some unique password generated by the bootstrap script
-    1. Install plugins using the Rhino package manager or
-    1. Copy/paste plugin files to C:\Users\RhinoComputeUser\AppData\Roaming\Grasshopper\Libraries
-    1. Restart the VM
+  1. Log into your VM using these credentials (write these down)
+     - User Name: RhinoComputeUser
+     - Password: #This will be some unique password generated by the bootstrap script
+  1. Install plugins using the Rhino package manager or
+  1. Copy/paste plugin files to C:\Users\RhinoComputeUser\AppData\Roaming\Grasshopper\Libraries
+  1. Restart the VM
 
 ### Fixed
 
@@ -365,4 +385,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - data output params are now passed back to hops
 
 ## [0.3.3] - 2021-03-03
+
 ## [0.1.0] - 2021-02-10
