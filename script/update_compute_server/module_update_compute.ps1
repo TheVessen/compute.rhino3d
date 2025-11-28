@@ -1,4 +1,5 @@
 # Download/Install compute
+# This scrip is an copy of the original from https://github.com/mcneel/compute.rhino3d/blob/81916f35a5ef45a99b27fb5e31d591decfa184ee/script/update-compute.ps1
 #Requires -RunAsAdministrator
 
 $physicalPathRoot = "C:\inetpub\wwwroot\aspnet_client\system_web\4_0_30319"
@@ -60,7 +61,7 @@ Move-Item -Path $computeGeometryPath -Destination $backupDir
 
 $gitPrefix = 'https://api.github.com/repos'
 $nightlyPrefix = 'https://nightly.link'
-$actionurl = 'theVessen/compute.rhino3d/actions/artifacts'
+$actionurl = 'vektornode/compute.rhino3d/actions/artifacts'
 $giturl = "$gitPrefix/$actionurl"
 
 $response = Invoke-RestMethod -Method Get -Uri $giturl
