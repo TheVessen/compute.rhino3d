@@ -547,7 +547,8 @@ namespace compute.geometry
                                     }
                                 }
 
-                                // Set contextual data FIRST
+                                // Set contextual data - pass the values as-is
+                                // The parameter will handle mapping internally
                                 contextualParameter.GetType()
                                     .GetMethod("AssignContextualData")?
                                     .Invoke(contextualParameter, new object[] { stringList });
@@ -925,6 +926,7 @@ namespace compute.geometry
                 var param = kvp.Value;
                 if (param == null)
                     continue;
+                
 
                 Resthopper.IO.DataTree<ResthopperObject> outputTree =
                     SerializeDataTree(param.VolatileData,param.Attributes.Parent.InstanceGuid, kvp.Key, rhinoVersion) as
@@ -960,7 +962,7 @@ namespace compute.geometry
                     if (goo == null)
                         continue;
 
-                    var t = goo.GetType().Name;
+                    var t = goo.GetType().FullName;
 
                     switch (goo)
                     {
@@ -1142,7 +1144,7 @@ namespace compute.geometry
                         
                         // Display Oject for ThreeJS
                         case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
-                                                 gooObj.GetType().FullName.IndexOf("ThreeDisplayGoo", StringComparison.OrdinalIgnoreCase) >= 0:
+                                                 gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0:
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
