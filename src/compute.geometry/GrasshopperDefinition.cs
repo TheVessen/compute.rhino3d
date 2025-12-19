@@ -75,6 +75,8 @@ namespace compute.geometry
             if (string.IsNullOrWhiteSpace(url))
                 return null;
             GrasshopperDefinition rc = DataCache.GetCachedDefinition(url);
+            // GrasshopperDefinition rc =null;
+
 
             if (rc != null)
             {
@@ -247,6 +249,8 @@ namespace compute.geometry
                         AddOutput(param, param.NickName, ref rc);
                     }
                 }
+                
+                // var t = new ContextBakeComponent
 
                 if (className == "ContextPrintComponent")
                 {
@@ -258,18 +262,6 @@ namespace compute.geometry
                     }  
                 }
 
-                //VektorNode custom outputs
-
-
-                // if (className.StartsWith("_"))
-                // {
-                //     var dataComponent = obj as GH_Component;
-                //     IGH_Param param = dataComponent.Params.Output[0];
-                //     param.NickName = "Data_" + param.InstanceGuid;
-                //     //Set spectial property for exposing JSON data
-                //     AddOutput(param, param.NickName, ref rc);
-                // }
-
                 //Endpoint for exposing JSON data
                 if (className.StartsWith("ExportJsonData"))
                 {
@@ -279,14 +271,6 @@ namespace compute.geometry
                     //Set spectial property for exposing JSON data
                     AddOutput(param, param.NickName, ref rc);
                 }
-
-                //Endpoints for WebDisplay
-                // if (className == "WebDisplay")
-                // {
-                //     var currentDisplayer = obj as GH_Component;
-                //     IGH_Param param = currentDisplayer.Params.Output[0];
-                //     AddOutput(param, param.NickName, ref rc);
-                // }
 
                 var group = obj as GH_Group;
                 if (group == null)
@@ -1144,16 +1128,9 @@ namespace compute.geometry
                         
                         // Display Oject for ThreeJS
                         case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
-                                                 gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0:
-                        {
-                            // Use reflection to get the Value property
-                            var valueProp = gooObj.GetType().GetProperty("Value");
-                            var value = valueProp?.GetValue(gooObj);
-                            resthopperObjectList.Add(GetResthopperObject<object>(value,paramId, rhinoVersion));
-                            break;
-                        }
-                        case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
-                                                 gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0:
+                                                 (gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                  gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                  gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0):
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
