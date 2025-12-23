@@ -367,6 +367,8 @@ namespace compute.geometry
                     {
                         if (contextualParameter.AtLeast == 0)
                             (contextualParameter as IGH_Param).Optional = true;
+
+                        var type = ParamTypeName(inputGroup.Param);
                         switch (ParamTypeName(inputGroup.Param))
                         {
                             
@@ -542,7 +544,36 @@ namespace compute.geometry
                                 inputGroup.Param.ExpireSolution(false);
                             }
                                 break;
+                            case "File":
+                            {
+                                Grasshopper.DataTree<GH_String> inputTree = new Grasshopper.DataTree<GH_String>();
+                                foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                {
+                                    GH_Path path = GetPath(entree.Key);
+                                    for (int i = 0; i < entree.Value.Count; i++)
+                                    {
+                                        GH_String s;
+                                        ResthopperObject restobj = entree.Value[i];
+                                        try
+                                        {
+                                            // Use JsonConvert to properly unescape the string
+                                            s = new GH_String(JsonConvert.DeserializeObject<string>(restobj.Data));
+                                            inputTree.Add(s, path);
+                                        }
+                                        catch (Exception)
+                                        {
+                                            s = new GH_String(
+                                                System.Text.RegularExpressions.Regex.Unescape(restobj.Data));
+                                            inputTree.Add(s, path);
+                                        }
+                                    }
+                                }
 
+                                contextualParameter.GetType()
+                                    .GetMethod("AssignContextualDataTree")?
+                                    .Invoke(contextualParameter, new object[] { inputTree });
+                            }
+                                break;
                             case "Geometry":
                             {
                                 Grasshopper.DataTree<IGH_GeometricGoo> inputTree =
