@@ -1,0 +1,17 @@
+# Example server list file for Update-ComputeCluster.ps1 and Monitor-ComputeCluster.ps1
+# One server per line (hostname or IP address)
+# Lines starting with # are ignored
+
+# Production compute servers
+compute1.company.local
+compute2.company.local
+compute3.company.local
+
+# Or use IP addresses
+# 192.168.1.10
+# 192.168.1.11
+# 192.168.1.12
+
+# Azure VMs
+# compute-vm-001.eastus.cloudapp.azure.com
+# compute-vm-002.eastus.cloudapp.azure.com
