@@ -61,7 +61,7 @@ namespace compute.geometry
             ApiKey = GetEnvironmentVariable<string>(RHINO_COMPUTE_KEY, null);
             LogPath = GetEnvironmentVariable(RHINO_COMPUTE_LOG_PATH, Path.Combine(Path.GetTempPath(), "Compute", "Logs"), COMPUTE_LOG_PATH);
             LogRetainDays = GetEnvironmentVariable(RHINO_COMPUTE_LOG_RETAIN_DAYS, 10, COMPUTE_LOG_RETAIN_DAYS);
-            CreateHeadlessDoc = GetEnvironmentVariable<bool>(RHINO_COMPUTE_CREATE_HEADLESS_DOC, false);
+            CreateHeadlessDoc = GetEnvironmentVariable<bool>(RHINO_COMPUTE_CREATE_HEADLESS_DOC, true);
             LoadGrasshopper = GetEnvironmentVariable<bool>(RHINO_COMPUTE_LOAD_GRASSHOPPER, true);
 
 #if DEBUG
