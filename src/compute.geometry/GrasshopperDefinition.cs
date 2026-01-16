@@ -262,15 +262,6 @@ namespace compute.geometry
                     }  
                 }
 
-                //Endpoint for exposing JSON data
-                if (className.StartsWith("ExportJsonData"))
-                {
-                    var dataComponent = obj as GH_Component;
-                    IGH_Param param = dataComponent.Params.Output[0];
-                    param.NickName = "Data_" + param.InstanceGuid;
-                    //Set spectial property for exposing JSON data
-                    AddOutput(param, param.NickName, ref rc);
-                }
 
                 var group = obj as GH_Group;
                 if (group == null)
