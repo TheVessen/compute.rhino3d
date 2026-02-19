@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using Carter;
@@ -7,8 +8,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using System.Linq;
+using GH_IO.Serialization;
+using Grasshopper.Kernel;
 using Newtonsoft.Json.Linq;
-using Rhino.PlugIns;
 
 namespace compute.geometry
 {
@@ -21,6 +23,7 @@ namespace compute.geometry
             app.MapGet("servertime", ServerTime);
             app.MapGet("plugins/rhino/installed", GetInstalledPluginsRhino);
             app.MapGet("plugins/gh/installed", GetInstalledPluginsGrasshopper);
+            app.MapPost("grasshopper/validate", ValidateGrasshopperFiles);
         }
 
         static void HomePage(HttpContext context)
@@ -79,6 +82,71 @@ namespace compute.geometry
             }
             ctx.Response.ContentType = "application/json";
             await ctx.Response.WriteAsJsonAsync(ghPluginInfo);
+        }
+        
+        static async Task ValidateGrasshopperFiles(HttpContext ctx)
+        {
+            var results = new List<JObject>();
+
+            foreach (var file in ctx.Request.Form.Files)
+            {
+                var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : file.Name;
+                try
+                {
+                    using var stream = file.OpenReadStream();
+                    using var mem = new MemoryStream();
+                    stream.CopyTo(mem);
+
+                    var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
+                    if (archive == null) { results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.")); continue; }
+
+                    var doc = GrasshopperValidationHelper.DocumentFromArchive(archive);
+                    if (doc == null) { results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.")); continue; }
+
+                    var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
+                    if (schemaComponents.Count == 0)
+                    {
+                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName,
+                            "This definition has no outputs defined. " +
+                            "Add a 'Context Bake' component, connect a 'UI Builder' component to its first input, " +
+                            "and make sure the Schema output param is named 'Schema'."));
+                        continue;
+                    }
+
+                    var schemas = new JArray();
+                    string error = null;
+
+                    foreach (var component in schemaComponents)
+                    {
+                        var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
+                        if (parent?.GetType().Name != "GH_UIBuilderComponent")
+                        {
+                            error = "The 'Schema' source is not coming from a 'UI Builder' component.";
+                            break;
+                        }
+
+                        var schema = GrasshopperValidationHelper.GetEmbeddedSchema(parent);
+                        if (schema == null)
+                        {
+                            error = "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.";
+                            break;
+                        }
+
+                        schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
+                    }
+
+                    results.Add(error != null
+                        ? GrasshopperValidationHelper.ErrorResult(fileName, error)
+                        : GrasshopperValidationHelper.SuccessResult(fileName, schemas));
+                }
+                catch (Exception ex)
+                {
+                    results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
+                }
+            }
+
+            ctx.Response.ContentType = "application/json";
+            await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(results));
         }
     }
 }
