@@ -1,6 +1,3 @@
-# Download/Install compute
-# This scrip is an copy of the original from https://github.com/mcneel/compute.rhino3d/blob/81916f35a5ef45a99b27fb5e31d591decfa184ee/script/update-compute.ps1
-#Requires -RunAsAdministrator
 
 # Download/Install compute
 # Improved version of https://github.com/mcneel/compute.rhino3d/blob/81916f35a5ef45a99b27fb5e31d591decfa184ee/script/update-compute.ps1
