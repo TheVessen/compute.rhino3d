@@ -86,6 +86,19 @@ namespace compute.geometry
         
         static async Task ValidateGrasshopperFiles(HttpContext ctx)
         {
+            if (ctx.Request.Method == "GET" || !ctx.Request.HasFormContentType || ctx.Request.Form.Files.Count == 0)
+            {
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new
+                {
+                    endpoint = "grasshopper/validate",
+                    status = "available",
+                    description = "Validates Grasshopper definition files (.gh/.ghx) for use with compute.",
+                    usage = "POST multipart/form-data with one or more .gh or .ghx files."
+                }));
+                return;
+            }
+
             var results = new List<JObject>();
 
             foreach (var file in ctx.Request.Form.Files)
