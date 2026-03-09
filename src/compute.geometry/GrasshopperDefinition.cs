@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Collections.Generic;
+using System.Drawing;
 using Rhino.Geometry;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
@@ -536,6 +537,36 @@ namespace compute.geometry
                             }
                                 break;
                             case "File":
+                            {
+                                Grasshopper.DataTree<GH_String> inputTree = new Grasshopper.DataTree<GH_String>();
+                                foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                {
+                                    GH_Path path = GetPath(entree.Key);
+                                    for (int i = 0; i < entree.Value.Count; i++)
+                                    {
+                                        GH_String s;
+                                        ResthopperObject restobj = entree.Value[i];
+                                        try
+                                        {
+                                            // Use JsonConvert to properly unescape the string
+                                            s = new GH_String(JsonConvert.DeserializeObject<string>(restobj.Data));
+                                            inputTree.Add(s, path);
+                                        }
+                                        catch (Exception)
+                                        {
+                                            s = new GH_String(
+                                                System.Text.RegularExpressions.Regex.Unescape(restobj.Data));
+                                            inputTree.Add(s, path);
+                                        }
+                                    }
+                                }
+
+                                contextualParameter.GetType()
+                                    .GetMethod("AssignContextualDataTree")?
+                                    .Invoke(contextualParameter, new object[] { inputTree });
+                            }
+                                break;
+                            case "Color":
                             {
                                 Grasshopper.DataTree<GH_String> inputTree = new Grasshopper.DataTree<GH_String>();
                                 foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
@@ -1147,12 +1178,18 @@ namespace compute.geometry
                             resthopperObjectList.Add(GetResthopperObject<Centermark>(rhValue, paramId,rhinoVersion));
                         }
                             break;
+                        case GH_Colour ghValue:
+                        {
+                            Color rhValue = ghValue.Value;
+                            resthopperObjectList.Add(GetResthopperObject<Color>(rhValue,paramId, rhinoVersion));
+                        }
+                            break;
                         
                         // Display Oject for ThreeJS
                         case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
                                                  (gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                   gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                  gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0):
+                                                  gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0 ) :
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
