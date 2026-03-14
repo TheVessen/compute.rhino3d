@@ -49,3 +49,5 @@ package/version/version.cs
 *.changes
 *.buildinfo
 /rhinocomputepackage
+**/.idea
+src/compute.sln.DotSettings.user
