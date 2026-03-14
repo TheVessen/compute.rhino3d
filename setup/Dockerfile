@@ -1,0 +1,74 @@
+FROM ubuntu:noble
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ============================================================
+# 1. Install base dependencies
+# ============================================================
+RUN apt update && apt install -y \
+    wget gpg nano git curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 2. Install .NET 9 SDK
+# ============================================================
+RUN wget https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh \
+      -O /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/share/dotnet \
+    && rm /tmp/dotnet-install.sh
+
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH="${PATH}:${DOTNET_ROOT}"
+
+# ============================================================
+# 3. Add McNeel package repo and install Rhino runtime libs
+# ============================================================
+RUN wget -qO- https://mcneel-packages.s3.amazonaws.com/mcneel-packages.gpg.key \
+      | gpg --dearmor -o /usr/share/keyrings/mcneel-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
+      https://mcneel-packages.s3.amazonaws.com/deb stable main" \
+      | tee /etc/apt/sources.list.d/mcneel.list \
+    && apt update && apt install -y rhino-compute \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 4. Fix NuGet config (prevent empty file errors)
+# ============================================================
+RUN mkdir -p /root/.nuget/NuGet \
+    && printf '<?xml version="1.0" encoding="utf-8"?>\n<configuration>\n  <packageSources>\n    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />\n  </packageSources>\n</configuration>\n' > /root/.nuget/NuGet/NuGet.Config
+
+# ============================================================
+# 5. Clone repo and checkout branch
+#    Override with --build-arg REPO_URL=... and BRANCH=...
+# ============================================================
+ARG REPO_URL=https://github.com/VektorNode/compute.rhino3d.git
+ARG BRANCH=9.x.selva
+
+RUN git clone ${REPO_URL} /home/rhino-compute-src \
+    && cd /home/rhino-compute-src \
+    && git checkout ${BRANCH}
+
+# ============================================================
+# 6. Build
+# ============================================================
+WORKDIR /home/rhino-compute-src/src
+RUN dotnet restore compute.sln \
+    && dotnet build compute.sln -c Release
+
+# ============================================================
+# 7. Expose ports
+#    6500 = main rhino.compute server (accessible from host)
+#    6001 = child compute.geometry process (internal)
+# ============================================================
+EXPOSE 6500
+EXPOSE 6001
+
+# ============================================================
+# 8. Startup script
+# ============================================================
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+CMD ["/start.sh"]
