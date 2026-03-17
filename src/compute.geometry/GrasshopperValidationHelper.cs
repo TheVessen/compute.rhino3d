@@ -71,25 +71,54 @@ namespace compute.geometry
                 ["name"]        = Prop<string>("Name"),
                 ["description"] = Prop<string>("Description"),
                 ["author"]      = Prop<string>("Author"),
-                ["inputCount"]  = inputs?.Count ?? 0,
-                ["outputCount"] = outputs?.Count ?? 0,
                 ["tags"]        = tags != null
                     ? new JArray(tags.Cast<object>().Select(t2 => t2?.ToString()))
-                    : new JArray()
+                    : new JArray(),
+                ["inputs"]  = SerializeParamList(inputs),
+                ["outputs"] = SerializeParamList(outputs),
             };
+        }
+
+        // Serializes a list of schema parameters (inputs or outputs) into a JArray.
+        // Each item is reflected to extract all simple-value properties (primitives, strings, enums).
+        private static JArray SerializeParamList(System.Collections.IList list)
+        {
+            var arr = new JArray();
+            if (list == null) return arr;
+            foreach (var item in list)
+                if (item != null) arr.Add(SerializeSchemaParam(item));
+            return arr;
+        }
+
+        private static JObject SerializeSchemaParam(object param)
+        {
+            var obj = new JObject();
+            foreach (var prop in param.GetType()
+                                      .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                                      .Where(p => p.CanRead && p.GetIndexParameters().Length == 0))
+            {
+                try
+                {
+                    var val = prop.GetValue(param);
+                    if (val == null) continue;
+                    var vt = val.GetType();
+                    if (vt.IsPrimitive || vt == typeof(string) || vt.IsEnum)
+                        obj[prop.Name] = JToken.FromObject(val);
+                }
+                catch { /* skip unreadable or unsupported properties */ }
+            }
+            return obj;
         }
 
         public static JObject ErrorResult(string fileName, string message) => new JObject
         {
             ["fileName"] = fileName,
-            ["valid"]    = false,
             ["error"]    = message
         };
 
         public static JObject SuccessResult(string fileName, JArray schemas) => new JObject
         {
             ["fileName"] = fileName,
-            ["valid"]    = true,
             ["schemas"]  = schemas
         };
     }

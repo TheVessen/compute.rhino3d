@@ -23,7 +23,7 @@ namespace compute.geometry
             app.MapGet("servertime", ServerTime);
             app.MapGet("plugins/rhino/installed", GetInstalledPluginsRhino);
             app.MapGet("plugins/gh/installed", GetInstalledPluginsGrasshopper);
-            app.MapPost("grasshopper/validate", ValidateGrasshopperFiles);
+            app.MapPost("grasshopper/schema", GetGrasshopperSchema);
         }
 
         static void HomePage(HttpContext context)
@@ -84,16 +84,16 @@ namespace compute.geometry
             await ctx.Response.WriteAsJsonAsync(ghPluginInfo);
         }
         
-        static async Task ValidateGrasshopperFiles(HttpContext ctx)
+        static async Task GetGrasshopperSchema(HttpContext ctx)
         {
             if (ctx.Request.Method == "GET" || !ctx.Request.HasFormContentType || ctx.Request.Form.Files.Count == 0)
             {
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new
                 {
-                    endpoint = "grasshopper/validate",
+                    endpoint = "grasshopper/schema",
                     status = "available",
-                    description = "Validates Grasshopper definition files (.gh/.ghx) for use with compute.",
+                    description = "Extracts the embedded schema from Grasshopper definition files (.gh/.ghx). Returns the full schema (inputs, outputs, metadata) when the definition is correctly wired (Context Bake → UI Builder with an embedded schema).",
                     usage = "POST multipart/form-data with one or more .gh or .ghx files."
                 }));
                 return;
