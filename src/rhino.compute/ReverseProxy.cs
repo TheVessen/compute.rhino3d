@@ -134,12 +134,35 @@ namespace rhino.compute
                 if (initialRequest.Headers.TryGetValue(_apiKeyHeader, out var keyHeader))
                     req.Headers.Add(_apiKeyHeader, keyHeader.ToString());
 
-                using (var stream = initialRequest.BodyReader.AsStream(false))
+                // ── BEGIN SELVA FIX ────────────────────────────────────────────────────────
+                // FIX: grasshopper/validate (and any multipart upload) was broken behind IIS.
+                // The original code read every POST body as a plain string and re-sent it with
+                // Content-Type: application/json (even had a typo: "applicaton/json").
+                // That destroyed the multipart boundary, so compute.geometry saw no form files
+                // and returned an "Unknown validation error".
+                // Fix: detect multipart requests and stream the body through as-is so the
+                // boundary and binary content are preserved.
+                var contentType = initialRequest.ContentType ?? string.Empty;
+                if (contentType.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Stream the raw body through unchanged so the multipart boundary survives.
+                    var mem = new System.IO.MemoryStream();
+                    await initialRequest.Body.CopyToAsync(mem);
+                    mem.Position = 0;
+                    var streamContent = new StreamContent(mem);
+                    streamContent.Headers.ContentType =
+                        System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+                    req.Content = streamContent;
+                    return await _client.SendAsync(req);
+                }
+                else
+                // ── END SELVA FIX ──────────────────────────────────────────────────────────
                 {
                     using (var sw = new System.IO.StreamReader(initialRequest.BodyReader.AsStream()))
                     {
                         string body = sw.ReadToEnd();
-                        using (var stringContent = new StringContent(body, System.Text.Encoding.UTF8, "applicaton/json"))
+                        // NOTE: original had a typo here ("applicaton/json") — fixed below
+                        using (var stringContent = new StringContent(body, System.Text.Encoding.UTF8, "application/json"))
                         {
                             req.Content = stringContent;
                             return await _client.SendAsync(req);
