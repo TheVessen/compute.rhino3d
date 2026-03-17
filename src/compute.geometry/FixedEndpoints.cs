@@ -36,7 +36,7 @@ namespace compute.geometry
             var values = new Dictionary<string, string>
             {
                 { "rhino", Rhino.RhinoApp.Version.ToString() },
-                { "compute", Assembly.GetExecutingAssembly().GetName().Version.ToString() }
+                { "compute", Assembly.GetExecutingAssembly().GetName().Version.ToString() },
             };
             string git_sha = null; // appveyor will replace this
             values.Add("git_sha", git_sha);
