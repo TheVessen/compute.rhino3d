@@ -59,24 +59,8 @@ namespace compute.geometry
 
         public static JObject SchemaToJson(object schema)
         {
-            var t = schema.GetType();
-            T Prop<T>(string name) => (T)(t.GetProperty(name)?.GetValue(schema) ?? default(T));
-
-            var inputs  = Prop<System.Collections.IList>("Inputs");
-            var outputs = Prop<System.Collections.IList>("Outputs");
-            var tags    = Prop<System.Collections.IList>("Tags");
-
-            return new JObject
-            {
-                ["name"]        = Prop<string>("Name"),
-                ["description"] = Prop<string>("Description"),
-                ["author"]      = Prop<string>("Author"),
-                ["tags"]        = tags != null
-                    ? new JArray(tags.Cast<object>().Select(t2 => t2?.ToString()))
-                    : new JArray(),
-                ["inputs"]  = SerializeParamList(inputs),
-                ["outputs"] = SerializeParamList(outputs),
-            };
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(schema);
+            return JObject.Parse(json);
         }
 
         // Serializes a list of schema parameters (inputs or outputs) into a JArray.
