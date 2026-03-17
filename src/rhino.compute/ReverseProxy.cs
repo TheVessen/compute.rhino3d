@@ -145,13 +145,15 @@ namespace rhino.compute
                 var contentType = initialRequest.ContentType ?? string.Empty;
                 if (contentType.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Stream the raw body through unchanged so the multipart boundary survives.
-                    var mem = new System.IO.MemoryStream();
-                    await initialRequest.Body.CopyToAsync(mem);
-                    mem.Position = 0;
-                    var streamContent = new StreamContent(mem);
+                    // Stream the raw body directly to the downstream request — no MemoryStream
+                    // buffer so the whole file is never duplicated in RAM. The Content-Length
+                    // header is forwarded so the child process gets a known-length body instead
+                    // of chunked transfer encoding.
+                    var streamContent = new StreamContent(initialRequest.Body);
                     streamContent.Headers.ContentType =
                         System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+                    if (initialRequest.ContentLength.HasValue)
+                        streamContent.Headers.ContentLength = initialRequest.ContentLength.Value;
                     req.Content = streamContent;
                     return await _client.SendAsync(req);
                 }
