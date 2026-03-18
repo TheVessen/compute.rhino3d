@@ -39,16 +39,11 @@ function Get-Stats($values) {
     return "  avg=${avg}s  min=${min}s  max=${max}s  ($all)"
 }
 
-function Kill-Tree($pid) {
-    # Kill the whole process tree rooted at $pid (dotnet run + app + compute.geometry)
-    & taskkill /T /F /PID $pid 2>$null | Out-Null
+function Kill-Tree($processId) {
+    # Kill the whole process tree rooted at $processId (dotnet run + app + compute.geometry)
+    & taskkill /T /F /PID $processId 2>$null | Out-Null
 }
 
-function Read-Logs($stdoutFile, $stderrFile) {
-    $a = if (Test-Path $stdoutFile) { Get-Content $stdoutFile -Raw -ErrorAction SilentlyContinue } else { "" }
-    $b = if (Test-Path $stderrFile) { Get-Content $stderrFile -Raw -ErrorAction SilentlyContinue } else { "" }
-    return "$a`n$b"
-}
 
 # -------------------------------------------------------
 # Resolve paths
@@ -127,8 +122,32 @@ for ($run = 1; $run -le $Runs; $run++) {
     Write-Host "  Run $run / $Runs" -ForegroundColor White
     Write-Host "──────────────────────────────────────" -ForegroundColor DarkGray
 
-    $stdoutLog = [System.IO.Path]::GetTempFileName()
-    $stderrLog = [System.IO.Path]::GetTempFileName()
+    # Ensure ports are free before starting
+    $portClear = $false
+    $waitDeadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $waitDeadline) {
+        $mainBusy = $false
+        $ghBusy   = $false
+        try {
+            Invoke-WebRequest -Uri "http://localhost:$Port/healthcheck" `
+                -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop | Out-Null
+            $mainBusy = $true
+        } catch {}
+        try {
+            Invoke-WebRequest -Uri "http://localhost:6001/version" `
+                -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop | Out-Null
+            $ghBusy = $true
+        } catch {}
+
+        if (-not $mainBusy -and -not $ghBusy) { $portClear = $true; break }
+        Write-Host "  Waiting for ports to free..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds 1
+    }
+
+    if (-not $portClear) {
+        Write-Host "  ✗  Ports still occupied — skipping run." -ForegroundColor Red
+        continue
+    }
 
     # Pass RHINO_TOKEN into the child process environment
     $env:RHINO_TOKEN = $Token
@@ -139,8 +158,6 @@ for ($run = 1; $run -le $Runs; $run++) {
     $proc = Start-Process `
         -FilePath        $runExe `
         -ArgumentList    $runArgs `
-        -RedirectStandardOutput $stdoutLog `
-        -RedirectStandardError  $stderrLog `
         -NoNewWindow `
         -PassThru `
         -WorkingDirectory $SrcPath
@@ -163,7 +180,6 @@ for ($run = 1; $run -le $Runs; $run++) {
     if ($null -eq $mainReady) {
         Write-Host "  ✗  Main server timed out — skipping run." -ForegroundColor Red
         Kill-Tree $proc.Id
-        Remove-Item $stdoutLog, $stderrLog -Force -ErrorAction SilentlyContinue
         continue
     }
 
@@ -172,21 +188,26 @@ for ($run = 1; $run -le $Runs; $run++) {
 
     # ---------------------------------------------------
     # MILESTONE 2 – compute.geometry (CG) finishes GH load
+    #
+    # compute.geometry's stdout is NOT piped back through
+    # rhino.compute, so log-file watching won't work here.
+    # Instead, poll http://localhost:6001/version directly —
+    # this port is accessible natively (unlike inside Docker).
     # ---------------------------------------------------
     $ghReady  = $null
     $deadline = $T0.AddSeconds($Timeout)
 
     while ((Get-Date) -lt $deadline) {
-        $logs = Read-Logs $stdoutLog $stderrLog
-        if ($logs -match "CG\s+\[.*\]\s+Application started") {
-            $ghReady = Get-Elapsed $T0
-            break
-        }
+        try {
+            $r = Invoke-WebRequest -Uri "http://localhost:6001/version" `
+                                   -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+            if ($r.StatusCode -eq 200) { $ghReady = Get-Elapsed $T0; break }
+        } catch {}
         Start-Sleep -Milliseconds 500
     }
 
     if ($null -eq $ghReady) {
-        Write-Host "  ⚠  GH child did not finish within $Timeout s." -ForegroundColor Yellow
+        Write-Host "  ⚠  GH child did not respond within $Timeout s." -ForegroundColor Yellow
     } else {
         Write-Host "  ✓  Grasshopper fully loaded  ── $ghReady s" -ForegroundColor Green
         $ghResults += $ghReady
@@ -196,11 +217,8 @@ for ($run = 1; $run -le $Runs; $run++) {
     # Teardown – kill the whole process tree
     # ---------------------------------------------------
     Kill-Tree $proc.Id
-    Remove-Item $stdoutLog, $stderrLog -Force -ErrorAction SilentlyContinue
+    try { $proc.WaitForExit(10000) } catch {}
     Write-Host ""
-
-    # Short pause so the port is freed before the next run
-    if ($run -lt $Runs) { Start-Sleep -Seconds 3 }
 }
 
 # -------------------------------------------------------

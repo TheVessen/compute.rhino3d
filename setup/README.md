@@ -6,10 +6,21 @@ Automated Docker setup for running Rhino.Compute from the x9 branch on Linux.
 
 ### 1. Build the image (one time)
 
-Open PowerShell, navigate to this folder, and run:
+Open PowerShell, **navigate to this `setup` folder**, and run:
 
 ```powershell
+cd D:\Coding\compute.rhino3d\setup
 docker build -t rhino-compute-x9 .
+```
+
+> ⚠️ **Important:** run the build from inside the `setup` folder.
+> If you run it from the repo root, Docker picks up the old Windows-based
+> Dockerfile there instead, and the build will fail.
+
+Alternatively, from the repo root:
+
+```powershell
+docker build -t rhino-compute-x9 -f setup/Dockerfile setup
 ```
 
 If the repo URL in the Dockerfile needs to be changed:

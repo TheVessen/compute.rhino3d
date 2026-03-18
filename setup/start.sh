@@ -44,11 +44,13 @@ cd /home/rhino-compute-src/src
 # IMPORTANT: --urls http://0.0.0.0:6500 binds to all interfaces
 # so the server is reachable from outside the container.
 # Without this, it only listens on localhost (container-internal).
+CHILD_COUNT="${RHINO_COMPUTE_CHILD_COUNT:-1}"
+
 exec dotnet run \
     --project rhino.compute \
     --configuration Release \
     --no-build \
     -- \
     --urls http://0.0.0.0:6500 \
-    --childcount 1 \
+    --childcount "$CHILD_COUNT" \
     --spawn-on-startup
