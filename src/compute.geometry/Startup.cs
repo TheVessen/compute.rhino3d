@@ -43,17 +43,22 @@ namespace compute.geometry
 
         void RhinoCoreStartup()
         {
+            var t0 = DateTime.Now;
+            Log.Information("RhinoCore initializing (license validation may take a few seconds)...");
             Program.RhinoCore = new Rhino.Runtime.InProcess.RhinoCore(null, Rhino.Runtime.InProcess.WindowStyle.NoWindow);
+            Log.Information("RhinoCore ready in {Elapsed:F2}s", (DateTime.Now - t0).TotalSeconds);
 
             if (Config.Debug)
                 Rhino.RhinoApp.SendWriteToConsole = true;
-            
+
             Environment.SetEnvironmentVariable("RHINO_TOKEN", null, EnvironmentVariableTarget.Process);
             Rhino.Runtime.HostUtils.OnExceptionReport += (source, ex) =>
             {
                 Log.Error(ex, "An exception occurred while processing request");
                 Logging.LogExceptionData(ex);
             };
+
+            var tStep = DateTime.Now;
 
             // NOTE:
             // andyopayne 11/19/2024 (RH-84777)
@@ -68,6 +73,8 @@ namespace compute.geometry
             {
                 Log.Error("Error loading rhino commands plugin.");
             }
+            Log.Information("(1/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
+            tStep = DateTime.Now;
 
             // NOTE:
             // eirannejad 10/02/2024 (COMPUTE-268)
@@ -101,6 +108,8 @@ namespace compute.geometry
             {
                 Log.Error("Error loading rhino scripting plugin. Grasshopper script components are going to fail");
             }
+            Log.Information("(2/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
+            tStep = DateTime.Now;
 
             // Load GH at startup so it can get initialized on the main thread
             if (Config.LoadGrasshopper)
@@ -118,17 +127,19 @@ namespace compute.geometry
                 if (runheadless != null)
                     runheadless.Invoke(pluginObject, null);
 #endif
-
             }
             else
             {
                 Log.Information("(3/4) Skipping grasshopper (disabled via RHINO_COMPUTE_LOAD_GRASSHOPPER)");
             }
+            Log.Information("(3/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
+            tStep = DateTime.Now;
 
             Log.Information("(4/4) Loading compute plug-ins");
             var loadComputePlugins = typeof(Rhino.PlugIns.PlugIn).GetMethod("LoadComputeExtensionPlugins");
             if (loadComputePlugins != null)
                 loadComputePlugins.Invoke(null, null);
+            Log.Information("(4/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
 
         }
 

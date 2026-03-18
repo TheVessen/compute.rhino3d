@@ -190,7 +190,7 @@ function Run-DockerTimings {
         if (-not $children.AllReady) {
             Write-Host "    ⚠  Only $($children.Count)/$ChildCount children ready within ${Timeout}s" -ForegroundColor Yellow
         } else {
-            Write-Host "    ✓  All $ChildCount children ready ${children.LastChild}s" -ForegroundColor Green
+            Write-Host "    ✓  All $ChildCount children ready $($children.LastChild)s" -ForegroundColor Green
         }
 
         if ($children.FirstChild) { $firstChildResults += $children.FirstChild }
@@ -284,7 +284,7 @@ function Run-NativeTimings {
         if (-not $children.AllReady) {
             Write-Host "    ⚠  Only $($children.Count)/$ChildCount children ready within ${Timeout}s" -ForegroundColor Yellow
         } else {
-            Write-Host "    ✓  All $ChildCount children ready ${children.LastChild}s" -ForegroundColor Green
+            Write-Host "    ✓  All $ChildCount children ready $($children.LastChild)s" -ForegroundColor Green
         }
 
         if ($children.FirstChild) { $firstChildResults += $children.FirstChild }
