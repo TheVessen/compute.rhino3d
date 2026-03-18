@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # ============================================================
 # time-startup.sh
 # Measures how long rhino-compute takes to fully start.
@@ -8,12 +8,13 @@
 #   chmod +x time-startup.sh
 #   ./time-startup.sh
 #   RHINO_TOKEN=your-real-token ./time-startup.sh
-#   ./time-startup.sh rhino-compute-x9 3   # image, number of runs
+#   ./time-startup.sh rhino-compute-x9 3 4  # image, runs, child count
 # ============================================================
 
 TOKEN="${RHINO_TOKEN:-your-token-here}"
 IMAGE="${1:-rhino-compute-x9}"
 RUNS="${2:-3}"
+CHILD_COUNT="${3:-4}"
 TIMEOUT=180
 CONTAINER="rc-timing-test"
 
@@ -24,8 +25,9 @@ elapsed_s() { python3 -c "print(round(($1 - $T0_MS) / 1000, 2))"; }
 echo ""
 echo "============================================"
 echo "  Rhino Compute Startup Timer"
-echo "  Image : $IMAGE"
-echo "  Runs  : $RUNS"
+echo "  Image    : $IMAGE"
+echo "  Runs     : $RUNS"
+echo "  Children : $CHILD_COUNT"
 echo "============================================"
 echo ""
 
@@ -47,11 +49,15 @@ for RUN in $(seq 1 "$RUNS"); do
     T0_MS=$(now_ms)
     echo "  [$(date '+%H:%M:%S')]  Starting container..."
 
-    docker run -d \
+    if ! docker run -d \
         --name "$CONTAINER" \
         -p 6500:6500 \
         -e RHINO_TOKEN="$TOKEN" \
-        "$IMAGE" > /dev/null
+        -e RHINO_COMPUTE_CHILD_COUNT="$CHILD_COUNT" \
+        "$IMAGE" > /dev/null 2>&1; then
+        echo "  ✗  docker run failed (port 6500 already in use?) — skipping run."
+        continue
+    fi
 
     # -------------------------------------------------------
     # MILESTONE 1 – main server responds on /healthcheck
@@ -79,13 +85,21 @@ for RUN in $(seq 1 "$RUNS"); do
     MAIN_RESULTS+=("$MAIN_READY")
 
     # -------------------------------------------------------
-    # MILESTONE 2 – child process (CG) finishes loading GH
+    # MILESTONE 2 – all children ready (poll /version on each)
     # -------------------------------------------------------
     GH_READY=""
     DEADLINE=$(( $(date +%s) + TIMEOUT ))
+    READY_COUNT=0
 
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-        if docker logs "$CONTAINER" 2>&1 | grep -qE "CG\s+\[.*\] Application started"; then
+        READY_COUNT=0
+        for i in $(seq 0 $(( CHILD_COUNT - 1 ))); do
+            PORT=$(( 6001 + i ))
+            STATUS=$(docker exec "$CONTAINER" curl -s -o /dev/null -w "%{http_code}" \
+                     --max-time 1 "http://localhost:$PORT/version" 2>/dev/null)
+            [ "$STATUS" = "200" ] && READY_COUNT=$(( READY_COUNT + 1 ))
+        done
+        if [ "$READY_COUNT" -ge "$CHILD_COUNT" ]; then
             GH_READY=$(elapsed_s "$(now_ms)")
             break
         fi
@@ -93,9 +107,9 @@ for RUN in $(seq 1 "$RUNS"); do
     done
 
     if [ -z "$GH_READY" ]; then
-        echo "  ⚠  GH child did not finish within ${TIMEOUT}s."
+        echo "  ⚠  Only $READY_COUNT/$CHILD_COUNT children ready within ${TIMEOUT}s."
     else
-        echo "  ✓  Grasshopper fully loaded  ── ${GH_READY}s"
+        echo "  ✓  All $CHILD_COUNT children ready  ── ${GH_READY}s"
         GH_RESULTS+=("$GH_READY")
     fi
 
@@ -117,9 +131,9 @@ import sys, statistics
 vals = list(map(float, sys.argv[1:]))
 if not vals:
     print("  n/a")
-    return
-print(f"  avg={statistics.mean(vals):.2f}s  min={min(vals):.2f}s  max={max(vals):.2f}s  "
-      f"({'  '.join(str(v)+'s' for v in vals)})")
+else:
+    print(f"  avg={statistics.mean(vals):.2f}s  min={min(vals):.2f}s  max={max(vals):.2f}s  "
+          f"({'  '.join(str(v)+'s' for v in vals)})")
 EOF
 }
 
@@ -129,7 +143,7 @@ echo "  Summary ($RUNS runs)"
 echo "============================================"
 printf "  Main server ready:\n"
 calc_stats "${MAIN_RESULTS[@]}"
-printf "  Fully ready (GH):\n"
+printf "  All children ready:\n"
 calc_stats "${GH_RESULTS[@]}"
 echo "============================================"
 echo ""
