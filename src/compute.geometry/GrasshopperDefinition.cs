@@ -1135,6 +1135,31 @@ namespace compute.geometry
                                 resthopperObjectList.Add(GetResthopperObject<Centermark>(rhValue, rhinoVersion));
                             }
                             break;
+                        ////////////////////////////////////////////
+                        /// Selva specific serialize color custom output types
+                        ////////////////////////////////////////////
+                        case GH_Colour ghValue:
+                            {
+                                Color rhValue = ghValue.Value;
+                                //TODO check if paramId is needed here?
+                                resthopperObjectList.Add(GetResthopperObject<Color>(rhValue, paramId, rhinoVersion));
+                            }
+                            break;
+
+                        case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
+                                             (gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                              gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                              gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0):
+                            {
+                                // Use reflection to get the Value property
+                                var valueProp = gooObj.GetType().GetProperty("Value");
+                                var value = valueProp?.GetValue(gooObj);
+                                //TODO check if paramId is needed here?
+                                resthopperObjectList.Add(GetResthopperObject<object>(value, paramId, rhinoVersion));
+                                break;
+                            }
+
+                            ////////////////////////////////////////////
                     }
                 }
                 // preserve paths when returning data
@@ -1226,6 +1251,8 @@ namespace compute.geometry
                     Default = i.Value.GetDefault(),
                     Minimum = i.Value.GetMinimum(),
                     Maximum = i.Value.GetMaximum(),
+                    //SELVA -> provide a instance Guid for param consitency 
+                    Id = i.Value.Param.InstanceGuid.ToString()
                 };
                 if (_singularComponent != null)
                 {

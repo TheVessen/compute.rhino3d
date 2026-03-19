@@ -13,7 +13,7 @@ namespace Resthopper.IO
     }
     public class Schema
     {
-        public Schema() {}
+        public Schema() { }
 
         [JsonProperty(PropertyName = "absolutetolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public double AbsoluteTolerance { get; set; } = 0;
@@ -88,6 +88,10 @@ namespace Resthopper.IO
         public object Default { get; set; } = null;
         public object Minimum { get; set; } = null;
         public object Maximum { get; set; } = null;
+        /// <summary>
+        /// SELVA (ID for param refrencing independend of name)
+        /// </summary>
+        public string ID { get; set; } = null;
     }
 
     public class IoResponseSchema
@@ -140,9 +144,9 @@ namespace Resthopper.IO
 
         public ResthopperObject(object obj)
         {
-            if(obj is GeometryBase geometry)
+            if (obj is GeometryBase geometry)
             {
-                Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = 7});
+                Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = 7 });
             }
             else
             {
