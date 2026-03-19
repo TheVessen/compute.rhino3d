@@ -510,7 +510,94 @@ namespace compute.geometry
                                             .Invoke(contextualParameter, new object[] { inputTree });
                                     }
                                     break;
-                                    //TODO: Add here SELVA specific endpoint like color, valuelist...
+                                ////////////////////////////////////////////////
+                                /// Selva Specific Contextual Inputs
+                                ////////////////////////////////////////////////
+                                case "ValueList":
+                                    {
+                                        var stringList = new List<string>();
+                                        foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                        {
+                                            for (int i = 0; i < entree.Value.Count; i++)
+                                            {
+                                                ResthopperObject restobj = entree.Value[i];
+                                                string data = restobj.Data.Trim('"');
+                                                stringList.Add(data);
+                                            }
+                                        }
+
+                                        // Set contextual data - pass the values as-is
+                                        // The parameter will handle mapping internally
+                                        contextualParameter.GetType()
+                                            .GetMethod("AssignContextualData")?
+                                            .Invoke(contextualParameter, new object[] { stringList });
+
+                                        // Then clear and expire
+                                        inputGroup.Param.VolatileData.Clear();
+                                        inputGroup.Param.ExpireSolution(false);
+                                    }
+                                    break;
+                                case "File":
+                                    {
+                                        Grasshopper.DataTree<GH_String> inputTree = new Grasshopper.DataTree<GH_String>();
+                                        foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                        {
+                                            GH_Path path = GetPath(entree.Key);
+                                            for (int i = 0; i < entree.Value.Count; i++)
+                                            {
+                                                GH_String s;
+                                                ResthopperObject restobj = entree.Value[i];
+                                                try
+                                                {
+                                                    // Use JsonConvert to properly unescape the string
+                                                    s = new GH_String(JsonConvert.DeserializeObject<string>(restobj.Data));
+                                                    inputTree.Add(s, path);
+                                                }
+                                                catch (Exception)
+                                                {
+                                                    s = new GH_String(
+                                                        System.Text.RegularExpressions.Regex.Unescape(restobj.Data));
+                                                    inputTree.Add(s, path);
+                                                }
+                                            }
+                                        }
+
+                                        contextualParameter.GetType()
+                                            .GetMethod("AssignContextualDataTree")?
+                                            .Invoke(contextualParameter, new object[] { inputTree });
+                                    }
+                                    break;
+                                case "Color":
+                                    {
+                                        Grasshopper.DataTree<GH_String> inputTree = new Grasshopper.DataTree<GH_String>();
+                                        foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                        {
+                                            GH_Path path = GetPath(entree.Key);
+                                            for (int i = 0; i < entree.Value.Count; i++)
+                                            {
+                                                GH_String s;
+                                                ResthopperObject restobj = entree.Value[i];
+                                                try
+                                                {
+                                                    // Use JsonConvert to properly unescape the string
+                                                    s = new GH_String(JsonConvert.DeserializeObject<string>(restobj.Data));
+                                                    inputTree.Add(s, path);
+                                                }
+                                                catch (Exception)
+                                                {
+                                                    s = new GH_String(
+                                                        System.Text.RegularExpressions.Regex.Unescape(restobj.Data));
+                                                    inputTree.Add(s, path);
+                                                }
+                                            }
+                                        }
+
+                                        contextualParameter.GetType()
+                                            .GetMethod("AssignContextualDataTree")?
+                                            .Invoke(contextualParameter, new object[] { inputTree });
+                                    }
+                                    break;
+                                    ////////////////////////////////////////////////
                             }
                             continue;
                         }
