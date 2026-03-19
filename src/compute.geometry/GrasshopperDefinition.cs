@@ -111,7 +111,7 @@ namespace compute.geometry
                 return null;
 
             var rc = Construct(archive);
-            if (rc!=null)
+            if (rc != null)
             {
                 rc.CacheKey = DataCache.CreateCacheKey(data);
                 if (cache)
@@ -126,7 +126,7 @@ namespace compute.geometry
         private static GrasshopperDefinition Construct(Guid componentId)
         {
             var component = Grasshopper.Instances.ComponentServer.EmitObject(componentId) as GH_Component;
-            if (component==null)
+            if (component == null)
                 return null;
 
             var definition = new GH_Document();
@@ -144,11 +144,11 @@ namespace compute.geometry
 
             GrasshopperDefinition rc = new GrasshopperDefinition(definition, null);
             rc._singularComponent = component;
-            foreach(var input in component.Params.Input)
+            foreach (var input in component.Params.Input)
             {
                 rc._input[input.NickName] = new InputGroup(input);
             }
-            foreach(var output in component.Params.Output)
+            foreach (var output in component.Params.Output)
             {
                 rc._output[output.NickName] = output;
             }
@@ -162,7 +162,7 @@ namespace compute.geometry
                 rc.HasErrors = true;
                 rc.ErrorMessages.Add(msg);
                 LogError(msg);
-            }   
+            }
             else
                 rc._input[name] = new InputGroup(param);
         }
@@ -174,7 +174,7 @@ namespace compute.geometry
                 rc.HasErrors = true;
                 rc.ErrorMessages.Add(msg);
                 LogError(msg);
-            }  
+            }
             else
                 rc._output[name] = param;
         }
@@ -183,7 +183,7 @@ namespace compute.geometry
         {
             string icon = null;
             var chunk = archive.GetRootNode.FindChunk("Definition");
-            if (chunk!=null)
+            if (chunk != null)
             {
                 chunk = chunk.FindChunk("DefinitionProperties");
                 if (chunk != null)
@@ -211,7 +211,7 @@ namespace compute.geometry
             }
 
             GrasshopperDefinition rc = new GrasshopperDefinition(definition, icon);
-            foreach( var obj in definition.Objects)
+            foreach (var obj in definition.Objects)
             {
                 IGH_ContextualParameter contextualParam = obj as IGH_ContextualParameter;
                 if (contextualParam != null)
@@ -233,7 +233,7 @@ namespace compute.geometry
                     {
                         IGH_Param param = contextBaker.Params.Input[0];
                         AddOutput(param, param.NickName, ref rc);
-                    }     
+                    }
                 }
 
                 if (className == "ContextPrintComponent")
@@ -252,7 +252,7 @@ namespace compute.geometry
 
                 string nickname = group.NickName;
                 var groupObjects = group.Objects();
-                if ( nickname.Contains("RH_IN") && groupObjects.Count>0)
+                if (nickname.Contains("RH_IN") && groupObjects.Count > 0)
                 {
                     var param = groupObjects[0] as IGH_Param;
                     if (param != null && !param.Locked)
@@ -267,12 +267,12 @@ namespace compute.geometry
                     {
                         AddOutput(param, nickname, ref rc);
                     }
-                    else if(groupObjects[0] is GH_Component component)
+                    else if (groupObjects[0] is GH_Component component)
                     {
                         int outputCount = component.Params.Output.Count;
-                        for(int i=0; i<outputCount; i++)
+                        for (int i = 0; i < outputCount; i++)
                         {
-                            if(1==outputCount)
+                            if (1 == outputCount)
                             {
                                 AddOutput(component.Params.Output[i], nickname, ref rc);
                             }
@@ -316,7 +316,7 @@ namespace compute.geometry
 
         public void SetInputs(Schema inputSchema)
         {
-            if(inputSchema.DataFormat == SchemaDataFormat.Grasshopper)
+            if (inputSchema.DataFormat == SchemaDataFormat.Grasshopper)
             {
                 foreach (var entry in inputSchema.GrasshopperValues.Values)
                 {
@@ -510,6 +510,7 @@ namespace compute.geometry
                                             .Invoke(contextualParameter, new object[] { inputTree });
                                     }
                                     break;
+                                    //TODO: Add here SELVA specific endpoint like color, valuelist...
                             }
                             continue;
                         }
@@ -814,7 +815,7 @@ namespace compute.geometry
             Definition.Enabled = true;
             Definition.NewSolution(false, GH_SolutionMode.CommandLine);
 
-            foreach(string msg in ErrorMessages)
+            foreach (string msg in ErrorMessages)
             {
                 outputSchema.Errors.Add(msg);
             }
@@ -1094,12 +1095,12 @@ namespace compute.geometry
                 return _iconString;
 
             System.Drawing.Bitmap bmp = null;
-            if (_singularComponent!=null)
+            if (_singularComponent != null)
             {
                 bmp = _singularComponent.Icon_24x24;
             }
 
-            if (bmp!=null)
+            if (bmp != null)
             {
                 using (var ms = new MemoryStream())
                 {
@@ -1292,7 +1293,7 @@ namespace compute.geometry
             public int GetAtLeast()
             {
                 IGH_ContextualParameter contextualParameter = Param as IGH_ContextualParameter;
-                if(contextualParameter!=null)
+                if (contextualParameter != null)
                 {
                     return contextualParameter.AtLeast;
                 }
@@ -1317,7 +1318,7 @@ namespace compute.geometry
                 if (contextualParameter != null)
                 {
                     var result = contextualParameter.GetType().GetProperty("TreeAccess")?.GetValue(contextualParameter, null);
-                    if(result != null)
+                    if (result != null)
                         return (bool)result;
                 }
                 return false;
@@ -1338,7 +1339,7 @@ namespace compute.geometry
                     var pType = par.GetType();
                     var props = pType.GetProperties(BindingFlags.NonPublic | BindingFlags.Instance);
                     var info = props.FirstOrDefault(x => x.Name == "Minimum");
-                    if(info != null)
+                    if (info != null)
                     {
                         var val = info.GetValue(par, null);
                         if (val != null)
@@ -1360,7 +1361,7 @@ namespace compute.geometry
                     if (p.Sources.Count == 1)
                         p = p.Sources[0];
                 }
-                
+
                 if (p is GH_NumberSlider paramSlider)
                     return (double)paramSlider.Slider.Minimum;
                 return null;
@@ -1376,7 +1377,7 @@ namespace compute.geometry
                     var pTypeName = ParamTypeName(p);
                     var props = pType.GetProperties(BindingFlags.NonPublic | BindingFlags.Instance);
                     var info = props.FirstOrDefault(x => x.Name == "Maximum");
-                    if(info != null)
+                    if (info != null)
                     {
                         var val = info.GetValue(par, null);
                         if (val != null)
