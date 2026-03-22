@@ -1,0 +1,10 @@
+# Terraform
+
+.terraform/
+_.tfstate
+_.tfstate.backup
+.terraform.lock.hcl
+
+# Sensitive — never commit your token
+
+terraform.tfvars
