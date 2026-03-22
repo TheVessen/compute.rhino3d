@@ -12,6 +12,7 @@
     <AppendRuntimeIdentifierToOutputPath>False</AppendRuntimeIdentifierToOutputPath>
     <Version>9.0.0</Version>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform(windows))">
@@ -60,11 +61,11 @@
   </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform(windows))">
-      <PackageReference Include="Microsoft.Windows.Compatibility" Version="9.0.0" />
-      <PackageReference Include="System.Management" Version="9.0.0" />  </ItemGroup>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="9.0.0" />
+    <PackageReference Include="System.Management" Version="9.0.0" />  </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform(linux))">
-      <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
   </ItemGroup>
 
 </Project>

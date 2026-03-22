@@ -74,37 +74,79 @@ namespace Resthopper.IO
 
     public class IoParamSchema
     {
+        [JsonProperty("name")]
         public string Name { get; set; }
+
+        [JsonProperty("nickname")]
         public string Nickname { get; set; }
+
+        [JsonProperty("paramType")]
         public string ParamType { get; set; }
+        
+        [JsonProperty("id")]
+        public string Id { get; set; }
     }
 
     public class InputParamSchema : IoParamSchema
     {
+        [JsonProperty("description")]
         public string Description { get; set; }
+
+        [JsonProperty("atLeast")]
         public int AtLeast { get; set; } = 1;
+
+        [JsonProperty("atMost")]
         public int AtMost { get; set; } = int.MaxValue;
+
+        [JsonProperty("treeAccess")]
         public bool TreeAccess { get; set; } = false;
+
+        [JsonProperty("default")]
         public object Default { get; set; } = null;
+
+        [JsonProperty("minimum")]
         public object Minimum { get; set; } = null;
+
+        [JsonProperty("maximum")]
         public object Maximum { get; set; } = null;
-        /// <summary>
-        /// SELVA (ID for param refrencing independend of name)
-        /// </summary>
-        public string ID { get; set; } = null;
+
+        [JsonProperty("groupName")]
+        public string GroupName { get; set; } = null;
+
+        [JsonProperty("values")]
+        public Dictionary<string, string> Values { get; set; } = null;
     }
 
     public class IoResponseSchema
     {
+        [JsonProperty("description")]
         public string Description { get; set; }
+
+        [JsonProperty("filename")]
         public string FileName { get; set; }
+
+        [JsonProperty("cachekey")]
         public string CacheKey { get; set; }
+
+        [JsonProperty("inputnames")]
         public List<string> InputNames { get; set; }
+
+        [JsonProperty("outputnames")]
         public List<string> OutputNames { get; set; }
+
+        [JsonProperty("icon")]
         public string Icon { get; set; }
+
+        [JsonProperty("inputs")]
         public List<InputParamSchema> Inputs { get; set; }
+
+        [JsonProperty("outputs")]
         public List<IoParamSchema> Outputs { get; set; }
+
+        [JsonProperty("warnings")]
         public List<string> Warnings { get; set; } = new List<string>();
+
+        [JsonProperty("errors")]
         public List<string> Errors { get; set; } = new List<string>();
 
         // List of supported data formats from the server
@@ -136,6 +178,10 @@ namespace Resthopper.IO
 
         [JsonIgnore]
         public object ResolvedData { get; set; }
+        
+        [JsonProperty(PropertyName = "id")]
+        public Guid Id { get; set; }
+
 
         [JsonConstructor]
         public ResthopperObject()
