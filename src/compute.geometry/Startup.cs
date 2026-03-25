@@ -266,6 +266,16 @@ namespace compute.geometry
                 Log.Information("Loading GHA: {Symlink} -> {Real}", gha, realPath);
                 try
                 {
+                    // Pre-load all DLLs from the GHA's directory into the AppDomain.
+                    // This prevents Rhino's broken GetRuntimeSpecificFolder from being called
+                    // when resolving dependencies (Rhino 9 Linux bug with null OS version strings).
+                    var ghaDir = System.IO.Path.GetDirectoryName(realPath);
+                    foreach (var dll in System.IO.Directory.GetFiles(ghaDir, "*.dll"))
+                    {
+                        try { System.Reflection.Assembly.LoadFrom(dll); }
+                        catch { /* ignore individual DLL load failures */ }
+                    }
+
                     var externalFile = externalFileCtor.Invoke(new object[] { realPath });
                     var result = loadGHAMethod.Invoke(cs, new object[] { externalFile, false });
                     Log.Information("LoadGHA result for {Name}: {Result}", System.IO.Path.GetFileName(gha), result);
