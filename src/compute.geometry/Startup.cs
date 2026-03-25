@@ -118,9 +118,23 @@ namespace compute.geometry
 #if LINUX
                 var ghpath = RhinoInside.Resolver.RhinoSystemDirectory + "/Plug-ins/Grasshopper/GrasshopperPlugin.rhp";
                 var pluginresult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
+                Log.Information("Grasshopper plugin load result: {Result}, id: {Id}", pluginresult, ghid);
                 var pluginObject = Rhino.RhinoApp.GetPlugInObject(ghid) as Grasshopper.Plugin.GH_RhinoScriptInterface;
-                if(pluginObject != null)
+                if (pluginObject != null)
+                {
                     pluginObject.RunHeadless();
+                }
+                else
+                {
+                    // Cast failed (version mismatch?) — fall back to reflection like non-Linux path
+                    Log.Warning("GH_RhinoScriptInterface cast failed, falling back to reflection for RunHeadless");
+                    var pluginObjectFallback = Rhino.RhinoApp.GetPlugInObject(ghid);
+                    var runheadless = pluginObjectFallback?.GetType().GetMethod("RunHeadless");
+                    if (runheadless != null)
+                        runheadless.Invoke(pluginObjectFallback, null);
+                    else
+                        Log.Error("RunHeadless not found on Grasshopper plugin object — GHA components will not be loaded");
+                }
 #else
                 var pluginObject = Rhino.RhinoApp.GetPlugInObject("Grasshopper");
                 var runheadless = pluginObject?.GetType().GetMethod("RunHeadless");

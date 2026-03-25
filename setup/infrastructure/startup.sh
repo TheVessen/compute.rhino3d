@@ -48,9 +48,10 @@ apt update && apt install -y rhino-compute yak-cli
 
 # ============================================================
 # 3b. Install Selva plugin via Yak
+# Run as root so packages land in /root/.local/share (where the service looks)
 # ============================================================
 echo ">>> Installing Selva plugin..."
-yak install selva
+HOME=/root yak install selva
 
 # ============================================================
 # 4. Fix NuGet config
@@ -94,6 +95,7 @@ Type=simple
 WorkingDirectory=/opt/rhino-compute-src/src
 Environment=DOTNET_ROOT=/usr/share/dotnet
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/share/dotnet
+Environment=HOME=/root
 Environment=RHINO_TOKEN=${rhino_token}
 Environment=RHINO_COMPUTE_KEY=${api_key}
 ExecStart=/usr/share/dotnet/dotnet run --project rhino.compute --configuration Release --no-build -- --urls http://0.0.0.0:6500 --childcount 1 --spawn-on-startup

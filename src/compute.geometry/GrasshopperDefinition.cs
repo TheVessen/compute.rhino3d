@@ -349,11 +349,6 @@ namespace compute.geometry
                     IGH_ContextualParameter contextualParameter = inputGroup.Param as IGH_ContextualParameter;
                     if (contextualParameter != null)
                     {
-                        // Clear and expire before re-assigning contextual data on cached definitions
-                        // TODO: Ceck if thats a selva specific issue
-                        inputGroup.Param.ClearData();
-                        inputGroup.Param.ExpireSolution(false);
-
                         var treeAccess = Convert.ToBoolean(contextualParameter.GetType().GetProperty("TreeAccess")?.GetValue(contextualParameter, null));
                         if (contextualParameter != null)
                         {
