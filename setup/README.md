@@ -183,7 +183,3 @@ before exiting.
 **"host.docker.internal" not resolving:**
 This hostname is specific to Docker Desktop. If you are using Docker Engine on
 bare Linux, use the host machine's actual IP address instead.
-
-## Questions?
-
-Contact luis@mcneel.com for issues with the Rhino.Compute Linux project.

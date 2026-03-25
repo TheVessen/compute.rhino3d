@@ -44,7 +44,13 @@ echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
   https://mcneel-packages.s3.amazonaws.com/deb stable main" \
   | tee /etc/apt/sources.list.d/mcneel.list
 
-apt update && apt install -y rhino-compute
+apt update && apt install -y rhino-compute yak-cli
+
+# ============================================================
+# 3b. Install Selva plugin via Yak
+# ============================================================
+echo ">>> Installing Selva plugin..."
+yak install selva
 
 # ============================================================
 # 4. Fix NuGet config

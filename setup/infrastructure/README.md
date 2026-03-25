@@ -226,7 +226,7 @@ sudo systemctl stop rhino-compute
 cd /opt/rhino-compute-src
 sudo git pull
 cd src
-sudo dotnet build compute.sln -c Release
+sudo /usr/share/dotnet/dotnet build src/compute.sln -c Release
 sudo systemctl start rhino-compute
 
 # Istall Yak
