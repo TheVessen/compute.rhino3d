@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using Carter;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
