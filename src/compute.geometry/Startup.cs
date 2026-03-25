@@ -126,6 +126,9 @@ namespace compute.geometry
                     Log.Information("Calling RunHeadless() directly");
                     pluginObject.RunHeadless();
                     Log.Information("RunHeadless() returned");
+                    Log.Information("GH Libraries folder: {Path}", Grasshopper.Folders.DefaultAssemblyFolder);
+                    Log.Information("GH UserObjects folder: {Path}", Grasshopper.Folders.UserObjectFolders?.FirstOrDefault() ?? "none");
+                    Log.Information("GH loaded assemblies count: {Count}", Grasshopper.Instances.ComponentServer?.Libraries?.Count ?? -1);
                 }
                 else
                 {
