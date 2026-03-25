@@ -191,16 +191,23 @@ namespace compute.geometry
 
             System.IO.Directory.CreateDirectory(ghLibraries);
 
-            var ghaFiles = System.IO.Directory.GetFiles(packagesDir, "*.gha", System.IO.SearchOption.AllDirectories)
-                .Where(f => f.Contains("/net7.0/") || f.Contains("/net8.0/") || f.Contains("/net9.0/"));
+            // Find all net7.0 (or net8/9) package directories that contain a GHA
+            var packageDirs = System.IO.Directory.GetFiles(packagesDir, "*.gha", System.IO.SearchOption.AllDirectories)
+                .Where(f => f.Contains("/net7.0/") || f.Contains("/net8.0/") || f.Contains("/net9.0/"))
+                .Select(f => System.IO.Path.GetDirectoryName(f))
+                .Distinct();
 
-            foreach (var gha in ghaFiles)
+            foreach (var dir in packageDirs)
             {
-                var dest = System.IO.Path.Combine(ghLibraries, System.IO.Path.GetFileName(gha));
-                if (!System.IO.File.Exists(dest))
+                // Link all files (GHA + DLLs) so dependency resolution works from Libraries folder
+                foreach (var file in System.IO.Directory.GetFiles(dir, "*.*").Where(f => f.EndsWith(".gha") || f.EndsWith(".dll")))
                 {
-                    System.IO.File.CreateSymbolicLink(dest, gha);
-                    Log.Information("Linked GHA: {Name} -> {Source}", System.IO.Path.GetFileName(gha), gha);
+                    var dest = System.IO.Path.Combine(ghLibraries, System.IO.Path.GetFileName(file));
+                    if (!System.IO.File.Exists(dest))
+                    {
+                        System.IO.File.CreateSymbolicLink(dest, file);
+                        Log.Information("Linked: {Name} -> {Source}", System.IO.Path.GetFileName(file), file);
+                    }
                 }
             }
         }
