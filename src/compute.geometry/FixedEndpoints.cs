@@ -129,10 +129,10 @@ namespace compute.geometry
                         results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.")); continue;
                     }
 
-                    Log.Debug("grasshopper/schema: document loaded, objectCount={Count}", doc.ObjectCount);
+                    Log.Information("grasshopper/schema: document loaded, objectCount={Count}", doc.ObjectCount);
 
                     var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
-                    Log.Debug("grasshopper/schema: found {Count} schema Context Bake component(s) in file={FileName}", schemaComponents.Count, fileName);
+                    Log.Information("grasshopper/schema: found {Count} schema Context Bake component(s) in file={FileName}", schemaComponents.Count, fileName);
 
                     if (schemaComponents.Count == 0)
                     {
