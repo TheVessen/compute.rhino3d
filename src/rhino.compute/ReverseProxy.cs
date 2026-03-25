@@ -134,12 +134,24 @@ namespace rhino.compute
                 if (initialRequest.Headers.TryGetValue(_apiKeyHeader, out var keyHeader))
                     req.Headers.Add(_apiKeyHeader, keyHeader.ToString());
 
+                var contentType = initialRequest.ContentType ?? string.Empty;
+                if (contentType.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+                {
+                    var streamContent = new StreamContent(initialRequest.Body);
+                    streamContent.Headers.ContentType =
+                        System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+                    if (initialRequest.ContentLength.HasValue)
+                        streamContent.Headers.ContentLength = initialRequest.ContentLength.Value;
+                    req.Content = streamContent;
+                    return await _client.SendAsync(req);
+                }
+
                 using (var stream = initialRequest.BodyReader.AsStream(false))
                 {
                     using (var sw = new System.IO.StreamReader(initialRequest.BodyReader.AsStream()))
                     {
                         string body = sw.ReadToEnd();
-                        using (var stringContent = new StringContent(body, System.Text.Encoding.UTF8, "applicaton/json"))
+                        using (var stringContent = new StringContent(body, System.Text.Encoding.UTF8, "application/json"))
                         {
                             req.Content = stringContent;
                             return await _client.SendAsync(req);
