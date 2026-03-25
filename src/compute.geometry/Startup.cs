@@ -128,7 +128,7 @@ namespace compute.geometry
                     Log.Information("Calling RunHeadless() directly");
                     pluginObject.RunHeadless();
                     Log.Information("RunHeadless() returned");
-                    Log.Information("GH loaded assemblies: {Count}", Grasshopper.Instances.ComponentServer?.Libraries?.Count ?? -1);
+                    LoadGHAssembliesFromLibraries();
                 }
                 else
                 {
@@ -203,6 +203,49 @@ namespace compute.geometry
                     Log.Information("Linked GHA: {Name} -> {Source}", System.IO.Path.GetFileName(gha), gha);
                 }
             }
+        }
+
+        // RunHeadless() on Rhino 9 Linux doesn't scan the Libraries folder.
+        // This method loads GHAs from Libraries directly after RunHeadless() via GH's internal loader.
+        static void LoadGHAssembliesFromLibraries()
+        {
+            var ghLibraries = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Grasshopper", "Libraries"
+            );
+
+            if (!System.IO.Directory.Exists(ghLibraries))
+            {
+                Log.Information("GH Libraries folder not found, skipping: {Path}", ghLibraries);
+                return;
+            }
+
+            var cs = Grasshopper.Instances.ComponentServer;
+            var csType = cs.GetType();
+            var loadMethod = csType.GetMethod("LoadAssembly",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                null, new[] { typeof(System.IO.FileInfo) }, null);
+
+            if (loadMethod == null)
+            {
+                Log.Warning("GH_ComponentServer.LoadAssembly(FileInfo) not found — cannot load GHA plugins");
+                return;
+            }
+
+            foreach (var gha in System.IO.Directory.GetFiles(ghLibraries, "*.gha"))
+            {
+                try
+                {
+                    loadMethod.Invoke(cs, new object[] { new System.IO.FileInfo(gha) });
+                    Log.Information("Loaded GHA: {Name}", System.IO.Path.GetFileName(gha));
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Failed to load GHA: {Name}", System.IO.Path.GetFileName(gha));
+                }
+            }
+
+            Log.Information("GH loaded assemblies after explicit load: {Count}", cs.Libraries?.Count ?? -1);
         }
 #endif
 
