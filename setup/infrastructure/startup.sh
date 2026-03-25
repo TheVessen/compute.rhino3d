@@ -32,6 +32,7 @@ echo 'export DOTNET_ROOT=/usr/share/dotnet' >> /etc/profile.d/dotnet.sh
 echo 'export PATH=$PATH:$DOTNET_ROOT' >> /etc/profile.d/dotnet.sh
 export DOTNET_ROOT=/usr/share/dotnet
 export PATH=$PATH:$DOTNET_ROOT
+ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
 
 # ============================================================
 # 3. Add McNeel package repo and install Rhino runtime
@@ -45,6 +46,9 @@ echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
   | tee /etc/apt/sources.list.d/mcneel.list
 
 apt update && apt install -y rhino-compute yak-cli
+
+# Make yak always use /root as HOME so packages install where the service can find them
+echo 'alias yak="HOME=/root yak"' >> /etc/bash.bashrc
 
 # ============================================================
 # 3b. Install Selva plugin via Yak and link into GH Libraries folder

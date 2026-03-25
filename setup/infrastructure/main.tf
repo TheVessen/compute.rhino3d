@@ -70,7 +70,7 @@ variable "repo_url" {
 variable "repo_branch" {
   description = "Git branch to checkout"
   type        = string
-  default     = "x9"
+  default     = "9.x.selva"
 }
 
 variable "api_key" {
