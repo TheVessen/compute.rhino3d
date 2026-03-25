@@ -1,5 +1,4 @@
-using System;
-using System.Linq;
+﻿using System;
 using Carter;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,9 +66,13 @@ namespace compute.geometry
             // This is a temporary solution until the gltf exporter is moved into Rhinocommon or Rhino.UI
             Log.Information("(1/4) Loading rhino commands plugin");
             if (Rhino.PlugIns.PlugIn.LoadPlugIn(s_rhinoCommandsPluginId))
+            {
                 Log.Information("Successfully loaded commands plugin");
+            }
             else
+            {
                 Log.Error("Error loading rhino commands plugin.");
+            }
             Log.Information("(1/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
             tStep = DateTime.Now;
 
@@ -113,21 +116,11 @@ namespace compute.geometry
             {
                 Log.Information("(3/4) Loading grasshopper");
 #if LINUX
-                // LinkYakPackagesToGHLibraries();
                 var ghpath = RhinoInside.Resolver.RhinoSystemDirectory + "/Plug-ins/Grasshopper/GrasshopperPlugin.rhp";
-                var ghLoadResult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
-                Log.Information("GH load: {Result}, id: {Id}", ghLoadResult, ghid);
+                var pluginresult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
                 var pluginObject = Rhino.RhinoApp.GetPlugInObject(ghid) as Grasshopper.Plugin.GH_RhinoScriptInterface;
-                Log.Information("GH plugin object: {Status}", pluginObject == null ? "null" : "ok");
-                if (pluginObject != null)
-                {
+                if(pluginObject != null)
                     pluginObject.RunHeadless();
-                    LoadGHAssembliesFromLibraries();
-                }
-                else
-                {
-                    Log.Error("Failed to get Grasshopper plugin object — GHA components will not be loaded");
-                }
 #else
                 var pluginObject = Rhino.RhinoApp.GetPlugInObject("Grasshopper");
                 var runheadless = pluginObject?.GetType().GetMethod("RunHeadless");
@@ -147,114 +140,8 @@ namespace compute.geometry
             if (loadComputePlugins != null)
                 loadComputePlugins.Invoke(null, null);
             Log.Information("(4/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
+
         }
-
-#if LINUX
-        // On Linux, GH does not scan the Yak packages directory.
-        // Symlink all GHAs and their DLLs into the GH Libraries folder so they get picked up.
-        static void LinkYakPackagesToGHLibraries()
-        {
-            var packagesDir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "mcneel", "rhinoceros", "packages", "9.0"
-            );
-            var ghLibraries = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "Grasshopper", "Libraries"
-            );
-
-            if (!System.IO.Directory.Exists(packagesDir))
-                return;
-
-            System.IO.Directory.CreateDirectory(ghLibraries);
-
-            // Group GHAs by filename, preferring net7+/net8+/net9+ over net48
-            var packageDirs = System.IO.Directory.GetFiles(packagesDir, "*.gha", System.IO.SearchOption.AllDirectories)
-                .GroupBy(f => System.IO.Path.GetFileName(f))
-                .Select(g => g.OrderByDescending(f =>
-                    f.Contains("/net7.0/") || f.Contains("/net8.0/") || f.Contains("/net9.0/") ? 1 : 0).First())
-                .Select(f => System.IO.Path.GetDirectoryName(f))
-                .Distinct();
-
-            foreach (var dir in packageDirs)
-            {
-                foreach (var file in System.IO.Directory.GetFiles(dir, "*.*").Where(f => f.EndsWith(".gha") || f.EndsWith(".dll")))
-                {
-                    var dest = System.IO.Path.Combine(ghLibraries, System.IO.Path.GetFileName(file));
-                    if (!System.IO.File.Exists(dest))
-                    {
-                        System.IO.File.CreateSymbolicLink(dest, file);
-                        Log.Information("Linked Yak package file: {Name}", System.IO.Path.GetFileName(file));
-                    }
-                }
-            }
-        }
-
-        // RunHeadless() on Rhino 9 Linux does not load GHAs from the Libraries folder.
-        // This method loads them explicitly using GH's internal LoadGHA method.
-        //
-        // Note: Dependencies (e.g. Selva.Core.dll) must be pre-loaded into the AppDomain first.
-        // Rhino 9 Linux has a bug in GetRuntimeSpecificFolder that throws ArgumentNullException
-        // when resolving package dependencies, so we bypass it by loading DLLs via Assembly.LoadFrom().
-        static void LoadGHAssembliesFromLibraries()
-        {
-            var ghLibraries = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "Grasshopper", "Libraries"
-            );
-
-            if (!System.IO.Directory.Exists(ghLibraries))
-                return;
-
-            var cs = Grasshopper.Instances.ComponentServer;
-            var csType = cs.GetType();
-
-            var loadGHAMethod = csType.GetMethod("LoadGHA",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-            var externalFileType = typeof(Grasshopper.Kernel.GH_ComponentServer).Assembly.GetType("Grasshopper.Kernel.GH_ExternalFile");
-            var externalFileCtor = externalFileType?.GetConstructor(
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-                null, new[] { typeof(string) }, null);
-
-            if (loadGHAMethod == null || externalFileCtor == null)
-            {
-                Log.Warning("Could not find GH internal methods for loading GHAs — Yak plugins will not be loaded");
-                return;
-            }
-
-            foreach (var gha in System.IO.Directory.GetFiles(ghLibraries, "*.gha"))
-            {
-                var realPath = System.IO.File.ResolveLinkTarget(gha, returnFinalTarget: true)?.FullName ?? gha;
-                try
-                {
-                    // Pre-load DLLs so Rhino's broken GetRuntimeSpecificFolder is never invoked for them.
-                    // Skip DLLs already in the AppDomain to avoid loading duplicate assemblies into
-                    // different load contexts, which breaks type-identity checks like `obj as GH_Component`.
-                    var ghaDir = System.IO.Path.GetDirectoryName(realPath);
-                    var loadedNames = new System.Collections.Generic.HashSet<string>(
-                        AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name),
-                        StringComparer.OrdinalIgnoreCase);
-                    foreach (var dll in System.IO.Directory.GetFiles(ghaDir, "*.dll"))
-                    {
-                        var dllName = System.IO.Path.GetFileNameWithoutExtension(dll);
-                        if (!loadedNames.Contains(dllName))
-                        {
-                            try { System.Reflection.Assembly.LoadFrom(dll); }
-                            catch { }
-                        }
-                    }
-
-                    var externalFile = externalFileCtor.Invoke(new object[] { realPath });
-                    loadGHAMethod.Invoke(cs, new object[] { externalFile, false });
-                    Log.Information("Loaded Yak GHA: {Name}", System.IO.Path.GetFileName(gha));
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Failed to load Yak GHA: {Name}", System.IO.Path.GetFileName(gha));
-                }
-            }
-        }
-#endif
 
     }
 }
