@@ -222,25 +222,44 @@ namespace compute.geometry
 
             var cs = Grasshopper.Instances.ComponentServer;
             var csType = cs.GetType();
-            var loadMethod = csType.GetMethod("LoadExternalFiles",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
-                null, new[] { typeof(bool) }, null);
+            var loadGHAMethod = csType.GetMethod("LoadGHA",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
 
-            if (loadMethod == null)
+            if (loadGHAMethod == null)
             {
-                Log.Warning("GH_ComponentServer.LoadExternalFiles(Boolean) not found — cannot load GHA plugins");
+                Log.Warning("GH_ComponentServer.LoadGHA not found");
                 return;
             }
 
-            try
+            // Get GH_ExternalFile constructor (takes FileInfo)
+            var externalFileType = typeof(Grasshopper.Kernel.GH_ComponentServer).Assembly.GetType("Grasshopper.Kernel.GH_ExternalFile");
+            if (externalFileType == null)
             {
-                loadMethod.Invoke(cs, new object[] { false });
-                Log.Information("GH loaded assemblies after LoadExternalFiles: {Count}", cs.Libraries?.Count ?? -1);
+                Log.Warning("Grasshopper.Kernel.GH_ExternalFile type not found");
+                return;
             }
-            catch (Exception ex)
+            var externalFileCtor = externalFileType.GetConstructor(new[] { typeof(System.IO.FileInfo) });
+            if (externalFileCtor == null)
             {
-                Log.Error(ex, "LoadExternalFiles failed");
+                Log.Warning("GH_ExternalFile(FileInfo) constructor not found");
+                return;
             }
+
+            foreach (var gha in System.IO.Directory.GetFiles(ghLibraries, "*.gha"))
+            {
+                try
+                {
+                    var externalFile = externalFileCtor.Invoke(new object[] { new System.IO.FileInfo(gha) });
+                    loadGHAMethod.Invoke(cs, new object[] { externalFile, false });
+                    Log.Information("LoadGHA called for: {Name}", System.IO.Path.GetFileName(gha));
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "LoadGHA failed for: {Name}", System.IO.Path.GetFileName(gha));
+                }
+            }
+
+            Log.Information("GH loaded assemblies after LoadGHA: {Count}", cs.Libraries?.Count ?? -1);
         }
 #endif
 
