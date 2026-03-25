@@ -252,13 +252,16 @@ namespace compute.geometry
                 return;
             }
 
+            // Resolve symlinks to real paths so GH loads from actual file location
             foreach (var gha in System.IO.Directory.GetFiles(ghLibraries, "*.gha"))
             {
+                var realPath = System.IO.File.ResolveLinkTarget(gha, returnFinalTarget: true)?.FullName ?? gha;
+                Log.Information("Loading GHA: {Symlink} -> {Real}", gha, realPath);
                 try
                 {
-                    var externalFile = externalFileCtor.Invoke(new object[] { gha });
-                    loadGHAMethod.Invoke(cs, new object[] { externalFile, false });
-                    Log.Information("LoadGHA called for: {Name}", System.IO.Path.GetFileName(gha));
+                    var externalFile = externalFileCtor.Invoke(new object[] { realPath });
+                    var result = loadGHAMethod.Invoke(cs, new object[] { externalFile, false });
+                    Log.Information("LoadGHA result for {Name}: {Result}", System.IO.Path.GetFileName(gha), result);
                 }
                 catch (Exception ex)
                 {
@@ -266,6 +269,15 @@ namespace compute.geometry
                 }
             }
 
+            // Check for loading exceptions
+            var getExceptions = csType.GetProperty("LoadingExceptions",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            var exceptions = getExceptions?.GetValue(cs) as System.Collections.IEnumerable;
+            if (exceptions != null)
+                foreach (var ex in exceptions)
+                    Log.Warning("GH loading exception: {Ex}", ex);
+
+            Log.Information("GH ObjectProxies count: {Count}", Grasshopper.Instances.ComponentServer.ObjectProxies?.Count() ?? -1);
             Log.Information("GH loaded assemblies after LoadGHA: {Count}", cs.Libraries?.Count ?? -1);
         }
 #endif
