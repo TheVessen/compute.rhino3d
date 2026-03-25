@@ -120,18 +120,26 @@ namespace compute.geometry
                 var pluginresult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
                 Log.Information("Grasshopper plugin load result: {Result}, id: {Id}", pluginresult, ghid);
                 var pluginObject = Rhino.RhinoApp.GetPlugInObject(ghid) as Grasshopper.Plugin.GH_RhinoScriptInterface;
+                Log.Information("GH_RhinoScriptInterface cast result: {IsNull}", pluginObject == null ? "null (cast failed)" : "ok");
                 if (pluginObject != null)
                 {
+                    Log.Information("Calling RunHeadless() directly");
                     pluginObject.RunHeadless();
+                    Log.Information("RunHeadless() returned");
                 }
                 else
                 {
                     // Cast failed (version mismatch?) — fall back to reflection like non-Linux path
                     Log.Warning("GH_RhinoScriptInterface cast failed, falling back to reflection for RunHeadless");
                     var pluginObjectFallback = Rhino.RhinoApp.GetPlugInObject(ghid);
+                    Log.Information("Fallback plugin object type: {Type}", pluginObjectFallback?.GetType().FullName ?? "null");
                     var runheadless = pluginObjectFallback?.GetType().GetMethod("RunHeadless");
                     if (runheadless != null)
+                    {
+                        Log.Information("Calling RunHeadless() via reflection");
                         runheadless.Invoke(pluginObjectFallback, null);
+                        Log.Information("RunHeadless() via reflection returned");
+                    }
                     else
                         Log.Error("RunHeadless not found on Grasshopper plugin object — GHA components will not be loaded");
                 }
