@@ -58,6 +58,8 @@ echo 'alias yak="HOME=/root yak"' >> /etc/bash.bashrc
 echo ">>> Installing Selva plugin..."
 HOME=/root yak install selva
 
+echo ">>> Installing Hops plugin..."
+HOME=/root yak install hops
 
 # ============================================================
 # 3c. Pre-create GH Libraries symlinks before service starts

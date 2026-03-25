@@ -193,7 +193,6 @@ gcloud compute ssh rhino-compute-server --zone=europe-west6-a
 sudo systemctl stop rhino-compute
 cd /opt/rhino-compute-src
 sudo git pull
-cd src
 sudo /usr/share/dotnet/dotnet build src/compute.sln -c Release
 sudo systemctl start rhino-compute
 
