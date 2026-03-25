@@ -228,7 +228,11 @@ namespace compute.geometry
 
             if (loadMethod == null)
             {
-                Log.Warning("GH_ComponentServer.LoadAssembly(FileInfo) not found — cannot load GHA plugins");
+                var allMethods = csType
+                    .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                    .Where(m => m.Name.ToLower().Contains("load") || m.Name.ToLower().Contains("assembl"))
+                    .Select(m => $"{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))})");
+                Log.Warning("GH_ComponentServer.LoadAssembly(FileInfo) not found. Available methods: {Methods}", string.Join(", ", allMethods));
                 return;
             }
 
