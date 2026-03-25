@@ -1,23 +1,33 @@
+gcloud compute instances stop rhino-compute-server --zone=europe-west6-a
+gcloud compute instances start rhino-compute-server --zone=europe-west6-a
+gcloud compute ssh rhino-compute-server --zone=europe-west6-a
+gcloud compute ssh rhino-compute-server --zone=europe-west6-a
+sudo systemctl stop rhino-compute
+sudo apt update && sudo apt install -y yak-cli
+yak install selva
+
 # Rhino.Compute on GCP — Terraform Deployment
 
-One-command deployment of Rhino.Compute (x9 branch) to Google Cloud.
+Easily deploy Rhino.Compute (x9 branch) to Google Cloud with one command.
 
-## What This Creates
+## What’s Created
 
 - **Compute Engine VM** (Ubuntu 24.04, 4 vCPU, 16 GB RAM, 30 GB SSD)
-- **Static public IP** (doesn't change on reboot)
-- **Firewall rules** for port 6500 (compute server) and 22 (SSH)
-- **Systemd service** that auto-starts on boot and restarts on crash
-- Everything installed automatically via startup script
+- **Static public IP** (persists on reboot)
+- **Firewall rules** for ports 6500 (compute) and 22 (SSH)
+- **Systemd service** (auto-starts, restarts on crash)
+- **Automated install** via startup script
 
 ## Prerequisites
 
-1. **GCP account** with a project and billing enabled
-2. **gcloud CLI** installed and authenticated
-3. **Terraform** installed
-4. **Rhino Core-Hour Billing token**
+1. GCP project with billing enabled
+2. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed & authenticated
+3. [Terraform](https://developer.hashicorp.com/terraform/install) installed
+4. Rhino Core-Hour Billing token
 
-### Install on macOS
+### Quick Install
+
+**macOS:**
 
 ```bash
 brew install --cask google-cloud-sdk
@@ -25,203 +35,161 @@ brew install terraform
 gcloud auth application-default login
 ```
 
-### Install on Windows (PowerShell)
+**Windows (PowerShell):**
 
 ```powershell
-# Install gcloud: https://cloud.google.com/sdk/docs/install
-# Install terraform: https://developer.hashicorp.com/terraform/install
+# Install gcloud & terraform from official docs
 gcloud auth application-default login
 ```
 
 ## Quick Start
 
-### 1. Configure
+1. **Configure:**
+   - Edit `terraform.tfvars`:
+     - `project_id` — your GCP project ID
+     - `rhino_token` — your Core-Hour Billing token
+     - `repo_url` — repo URL (if not default)
 
-Edit `terraform.tfvars` and fill in:
+2. **Deploy:**
 
-- `project_id` — your GCP project ID
-- `rhino_token` — your Core-Hour Billing token
-- `repo_url` — the repo URL (if different from default)
+   ```bash
+   cd terraform-rhino-compute
+   terraform init
+   terraform apply
+   ```
 
-### 2. Deploy
+   - Outputs server URL and SSH command
 
-```bash
-cd terraform-rhino-compute
-terraform init       # one-time setup, downloads the GCP provider
-terraform apply      # creates everything, type "yes" to confirm
-```
+3. **Wait for Setup:**
+   - Takes 3–5 minutes after VM creation
+   - Monitor progress:
+     ```bash
+     gcloud compute ssh rhino-compute-server --zone=europe-west6-a
+     sudo tail -f /var/log/rhino-compute-setup.log
+     sudo systemctl status rhino-compute
+     sudo journalctl -u rhino-compute -f
+     ```
 
-Terraform will output:
+4. **Connect:**
+   - Use the server URL in your client:
+     ```typescript
+     const COMPUTE_SERVER = "http://34.65.xx.xx:6500";
+     ```
+   - Or set server address/API key in Grasshopper/Hops
 
-- The **server URL** (e.g. `http://34.65.xx.xx:6500`)
-- The **SSH command** to access the server
+5. **Tear Down:**
 
-### 3. Wait for Setup
+   ```bash
+   terraform destroy
+   ```
 
-The VM takes about 3-5 minutes to finish installing everything after
-creation. You can monitor progress by SSHing in and checking the log:
+   - Removes all resources and stops billing
 
-```bash
-# SSH into the server
-gcloud compute ssh rhino-compute-server --zone=europe-west6-a
+## Server Management
 
-# Watch the setup log
-sudo tail -f /var/log/rhino-compute-setup.log
+- **SSH:**
+  ```bash
+  gcloud compute ssh rhino-compute-server --zone=europe-west6-a
+  ```
+- **Restart service:**
+  ```bash
+  sudo systemctl restart rhino-compute
+  ```
+- **Stop service (VM runs, no core-hour billing):**
+  ```bash
+  sudo systemctl stop rhino-compute
+  ```
+- **Stop VM (stops all billing except disk):**
+  ```bash
+  gcloud compute instances stop rhino-compute-server --zone=europe-west6-a
+  ```
+- **Start VM:**
+  ```bash
+  gcloud compute instances start rhino-compute-server --zone=europe-west6-a
+  ```
+- **View logs:**
+  ```bash
+  sudo journalctl -u rhino-compute -f
+  ```
+- **Update code:**
+  ```bash
+  sudo systemctl stop rhino-compute
+  cd /opt/rhino-compute-src
+  sudo git pull
+  cd src
+  sudo dotnet build compute.sln -c Release
+  sudo systemctl start rhino-compute
+  ```
 
-# Check if the service is running
-sudo systemctl status rhino-compute
+## Cost Estimate (europe-west6)
 
-# View live server logs
-sudo journalctl -u rhino-compute -f
-```
+| Resource         | Spec              | ~Monthly Cost |
+| ---------------- | ----------------- | ------------- |
+| e2-standard-4 VM | 4 vCPU, 16 GB RAM | $100–120      |
+| 30 GB SSD        | pd-ssd            | $5            |
+| Static IP        | attached          | $0            |
+| Static IP        | if VM stopped     | $7            |
+| **Total**        |                   | **$110–130**  |
 
-### 4. Connect
+**Tips to reduce costs:**
 
-Once setup is complete, point your client to the server URL:
+- Stop VM when not in use
+- Use `e2-standard-2` for lighter workloads ($50–60/mo)
+- Use Spot/Preemptible VMs for testing (60–80% cheaper, can be interrupted)
+- Run `terraform destroy` when done
 
-```typescript
-const COMPUTE_SERVER = "http://34.65.xx.xx:6500"; // use your actual IP
-```
-
-Or from Grasshopper/Hops, set the server address and API key.
-
-### 5. Tear Down
-
-```bash
-terraform destroy    # removes everything, type "yes" to confirm
-```
-
-This deletes the VM, static IP, and firewall rules. You stop paying immediately.
-
-## Managing the Server
-
-**SSH into the server:**
-
-```bash
-gcloud compute ssh rhino-compute-server --zone=europe-west6-a
-```
-
-**Restart the service:**
-
-```bash
-sudo systemctl restart rhino-compute
-```
-
-**Stop the service (VM stays running, stops billing core-hours):**
-
-```bash
-sudo systemctl stop rhino-compute
-```
-
-**Stop the VM entirely (stops all billing except disk storage):**
-
-```bash
-gcloud compute instances stop rhino-compute-server --zone=europe-west6-a
-```
-
-**Start the VM again (service auto-starts):**
-
-```bash
-gcloud compute instances start rhino-compute-server --zone=europe-west6-a
-```
-
-**View logs:**
-
-```bash
-sudo journalctl -u rhino-compute -f
-```
-
-**Pull latest code and rebuild:**
-
-```bash
-sudo systemctl stop rhino-compute
-cd /opt/rhino-compute-src
-sudo git pull
-cd src
-sudo dotnet build compute.sln -c Release
-sudo systemctl start rhino-compute
-```
-
-## Cost Estimate
-
-Running in europe-west6 (Zurich):
-
-| Resource            | Spec              | ~Monthly Cost |
-| ------------------- | ----------------- | ------------- |
-| e2-standard-4 VM    | 4 vCPU, 16 GB RAM | ~$100-120     |
-| 30 GB SSD           | pd-ssd            | ~$5           |
-| Static IP           | (while attached)  | $0            |
-| Static IP           | (if VM stopped)   | ~$7           |
-| **Total (running)** |                   | **~$110-130** |
-
-To reduce costs:
-
-- Stop the VM when not in use (`gcloud compute instances stop ...`)
-- Use `e2-standard-2` (2 vCPU, 8 GB) for lighter workloads (~$50-60/mo)
-- Use Spot/Preemptible VMs for testing (~60-80% cheaper but can be interrupted)
-- `terraform destroy` when done to stop all charges
-
-Plus Rhino core-hour billing charges from McNeel based on usage.
+_Rhino core-hour billing applies separately._
 
 ## File Structure
 
 ```
 terraform-rhino-compute/
-  main.tf             # Infrastructure definition
-  startup.sh          # Server setup script (runs on first boot)
-  terraform.tfvars    # Your configuration (edit this)
+  main.tf          # Infrastructure definition
+  startup.sh       # Server setup script
+  terraform.tfvars # Your configuration
 ```
 
 ## Troubleshooting
 
-**"terraform apply" fails with permission errors:**
-Make sure you ran `gcloud auth application-default login` and that your
-GCP project has the Compute Engine API enabled.
+- **terraform apply fails (permission errors):**
+  - Run `gcloud auth application-default login`
+  - Ensure Compute Engine API is enabled
+- **Server not reachable after apply:**
+  - Wait 3–5 minutes for setup
+  - SSH in and check `/var/log/rhino-compute-setup.log`
+- **Computations fail (PAL_SEHException):**
+  - RHINO_TOKEN missing/invalid
+  - Check:
+    ```bash
+    sudo systemctl status rhino-compute
+    sudo journalctl -u rhino-compute --no-pager | tail -50
+    ```
+- **Change token:**
+  ```bash
+  sudo systemctl edit rhino-compute
+  # Add under [Service]:
+  # Environment=RHINO_TOKEN=new-token-here
+  sudo systemctl restart rhino-compute
+  ```
+- **Change VM size:**
+  - Edit `machine_type` in terraform.tfvars, then `terraform apply`
+- **Build fails in VM:**
+  - SSH in, check dotnet availability
+  - Review `/var/log/rhino-compute-setup.log`
 
-**Server not reachable after terraform apply:**
-The startup script takes 3-5 minutes. SSH in and check
-`/var/log/rhino-compute-setup.log` for progress.
-
-**Computations fail (PAL_SEHException):**
-The RHINO_TOKEN is missing or invalid. Check with:
+## Common Commands
 
 ```bash
-sudo systemctl status rhino-compute
-sudo journalctl -u rhino-compute --no-pager | tail -50
-```
-
-**Need to change the token:**
-
-```bash
-sudo systemctl edit rhino-compute
-# Add under [Service]:
-# Environment=RHINO_TOKEN=new-token-here
-sudo systemctl restart rhino-compute
-```
-
-**Want to change VM size:**
-Update `machine_type` in terraform.tfvars and run `terraform apply`.
-
-**Build fails inside the VM:**
-SSH in and check if dotnet is available. The startup script logs
-everything to `/var/log/rhino-compute-setup.log`.
-
-#Comands
-
-# Stop the VM entirely (stops all billing except disk + static IP)
-
+# Stop VM (stops all billing except disk + static IP)
 gcloud compute instances stop rhino-compute-server --zone=europe-west6-a
 
-# Start it again (service auto-starts)
-
+# Start VM (service auto-starts)
 gcloud compute instances start rhino-compute-server --zone=europe-west6-a
 
+# SSH into VM
 gcloud compute ssh rhino-compute-server --zone=europe-west6-a
 
-# Update
-
-gcloud compute ssh rhino-compute-server --zone=europe-west6-a
-
+# Update code
 sudo systemctl stop rhino-compute
 cd /opt/rhino-compute-src
 sudo git pull
@@ -229,14 +197,14 @@ cd src
 sudo /usr/share/dotnet/dotnet build src/compute.sln -c Release
 sudo systemctl start rhino-compute
 
-# Istall Yak
-
+# Install Yak
 sudo apt update && sudo apt install -y yak-cli
 
-for using selva install selva
+# Install selva (optional)
 
-yak install selva
 
-## replace existing
-
+# Replace existing instance
 terraform apply -replace="google_compute_instance.rhino_compute"
+```
+
+GH Libraries folder = /root/.config/Grasshopper/Libraries/ — that's where GH scans for GHAs

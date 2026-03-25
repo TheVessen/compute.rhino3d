@@ -47,8 +47,9 @@ echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
 apt update && apt install -y rhino-compute yak-cli
 
 # ============================================================
-# 3b. Install Selva plugin via Yak
+# 3b. Install Selva plugin via Yak and link into GH Libraries folder
 # Run as root so packages land in /root/.local/share (where the service looks)
+# GH on Linux scans /root/.config/Grasshopper/Libraries/ — Yak packages dir is NOT scanned
 # ============================================================
 echo ">>> Installing Selva plugin..."
 HOME=/root yak install selva

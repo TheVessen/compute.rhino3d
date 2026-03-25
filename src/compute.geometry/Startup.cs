@@ -117,6 +117,7 @@ namespace compute.geometry
             {
                 Log.Information("(3/4) Loading grasshopper");
 #if LINUX
+                LinkYakPackagesToGHLibraries();
                 var ghpath = RhinoInside.Resolver.RhinoSystemDirectory + "/Plug-ins/Grasshopper/GrasshopperPlugin.rhp";
                 var pluginresult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
                 Log.Information("Grasshopper plugin load result: {Result}, id: {Id}", pluginresult, ghid);
@@ -127,9 +128,7 @@ namespace compute.geometry
                     Log.Information("Calling RunHeadless() directly");
                     pluginObject.RunHeadless();
                     Log.Information("RunHeadless() returned");
-                    Log.Information("GH Libraries folder: {Path}", Grasshopper.Folders.DefaultAssemblyFolder);
-                    Log.Information("GH UserObjects folder: {Path}", Grasshopper.Folders.UserObjectFolders?.FirstOrDefault() ?? "none");
-                    Log.Information("GH loaded assemblies count: {Count}", Grasshopper.Instances.ComponentServer?.Libraries?.Count ?? -1);
+                    Log.Information("GH loaded assemblies: {Count}", Grasshopper.Instances.ComponentServer?.Libraries?.Count ?? -1);
                 }
                 else
                 {
@@ -168,6 +167,44 @@ namespace compute.geometry
             Log.Information("(4/4) done in {Elapsed:F2}s", (DateTime.Now - tStep).TotalSeconds);
 
         }
+
+#if LINUX
+        // GH on Linux only scans its Libraries folder — it does NOT scan the Yak packages directory.
+        // This method finds all GHAs in the Yak packages dir and symlinks them into GH Libraries
+        // so that any installed Yak plugin is picked up automatically by RunHeadless().
+        static void LinkYakPackagesToGHLibraries()
+        {
+            var packagesDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "mcneel", "rhinoceros", "packages", "9.0"
+            );
+            var ghLibraries = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Grasshopper", "Libraries"
+            );
+
+            if (!System.IO.Directory.Exists(packagesDir))
+            {
+                Log.Information("Yak packages dir not found, skipping GHA linking: {Path}", packagesDir);
+                return;
+            }
+
+            System.IO.Directory.CreateDirectory(ghLibraries);
+
+            var ghaFiles = System.IO.Directory.GetFiles(packagesDir, "*.gha", System.IO.SearchOption.AllDirectories)
+                .Where(f => f.Contains("/net7.0/") || f.Contains("/net8.0/") || f.Contains("/net9.0/"));
+
+            foreach (var gha in ghaFiles)
+            {
+                var dest = System.IO.Path.Combine(ghLibraries, System.IO.Path.GetFileName(gha));
+                if (!System.IO.File.Exists(dest))
+                {
+                    System.IO.File.CreateSymbolicLink(dest, gha);
+                    Log.Information("Linked GHA: {Name} -> {Source}", System.IO.Path.GetFileName(gha), gha);
+                }
+            }
+        }
+#endif
 
     }
 }
