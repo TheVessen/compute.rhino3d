@@ -231,17 +231,24 @@ namespace compute.geometry
                 return;
             }
 
-            // Get GH_ExternalFile constructor (takes FileInfo)
+            // Find GH_ExternalFile constructors
             var externalFileType = typeof(Grasshopper.Kernel.GH_ComponentServer).Assembly.GetType("Grasshopper.Kernel.GH_ExternalFile");
             if (externalFileType == null)
             {
                 Log.Warning("Grasshopper.Kernel.GH_ExternalFile type not found");
                 return;
             }
-            var externalFileCtor = externalFileType.GetConstructor(new[] { typeof(System.IO.FileInfo) });
+
+            var ctors = externalFileType.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Log.Information("GH_ExternalFile constructors: {Ctors}", string.Join(", ", ctors.Select(c => $"({string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name))})")));
+
+            // Try constructor with string path
+            var externalFileCtor = externalFileType.GetConstructor(new[] { typeof(string) })
+                ?? externalFileType.GetConstructor(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, null, new[] { typeof(string) }, null);
+
             if (externalFileCtor == null)
             {
-                Log.Warning("GH_ExternalFile(FileInfo) constructor not found");
+                Log.Warning("No usable GH_ExternalFile constructor found");
                 return;
             }
 
@@ -249,7 +256,7 @@ namespace compute.geometry
             {
                 try
                 {
-                    var externalFile = externalFileCtor.Invoke(new object[] { new System.IO.FileInfo(gha) });
+                    var externalFile = externalFileCtor.Invoke(new object[] { gha });
                     loadGHAMethod.Invoke(cs, new object[] { externalFile, false });
                     Log.Information("LoadGHA called for: {Name}", System.IO.Path.GetFileName(gha));
                 }
