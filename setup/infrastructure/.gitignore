@@ -1,8 +1,8 @@
 # Terraform
 
 .terraform/
-_.tfstate
-_.tfstate.backup
+*.tfstate
+*.tfstate.backup
 .terraform.lock.hcl
 
 # Sensitive — never commit your token

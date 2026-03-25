@@ -89,6 +89,7 @@ WorkingDirectory=/opt/rhino-compute-src/src
 Environment=DOTNET_ROOT=/usr/share/dotnet
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/share/dotnet
 Environment=RHINO_TOKEN=${rhino_token}
+Environment=RHINO_COMPUTE_KEY=${api_key}
 ExecStart=/usr/share/dotnet/dotnet run --project rhino.compute --configuration Release --no-build -- --urls http://0.0.0.0:6500 --childcount 1 --spawn-on-startup
 Restart=always
 RestartSec=10
@@ -104,6 +105,14 @@ echo ">>> Starting rhino-compute service..."
 systemctl daemon-reload
 systemctl enable rhino-compute
 systemctl start rhino-compute
+
+# ============================================================
+# 8. Auto-shutdown timer (if configured)
+# ============================================================
+%{ if max_uptime_hours > 0 ~}
+echo ">>> Scheduling auto-shutdown in ${max_uptime_hours} hour(s)..."
+shutdown -h +$(( ${max_uptime_hours} * 60 ))
+%{ endif ~}
 
 echo "=== Setup completed at $(date) ==="
 echo "=== Server should be running on http://0.0.0.0:6500 ==="

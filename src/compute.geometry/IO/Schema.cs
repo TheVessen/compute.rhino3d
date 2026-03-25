@@ -160,11 +160,22 @@ namespace Resthopper.IO
         {
 
         }
+        [JsonProperty("iorequest")]
         public string IORequest { get; set; }
+
+        [JsonProperty("ioresponse")]
         public string IOResponse { get; set; }
+
+        [JsonProperty("solverequest")]
         public string SolveRequest { get; set; }
+
+        [JsonProperty("solveresponse")]
         public string SolveResponse { get; set; }
+
+        [JsonProperty("schema")]
         public Schema Schema { get; set; }
+
+        [JsonProperty("ioresponseschema")]
         public IoResponseSchema IOResponseSchema { get; set; }
     }
 

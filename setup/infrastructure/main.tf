@@ -73,6 +73,19 @@ variable "repo_branch" {
   default     = "x9"
 }
 
+variable "api_key" {
+  description = "API key for securing Rhino.Compute (sent via RhinoComputeKey header)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "max_uptime_hours" {
+  description = "Auto-shutdown after this many hours (0 = disabled)"
+  type        = number
+  default     = 0
+}
+
 # ============================================================
 # Static IP
 # ============================================================
@@ -142,6 +155,8 @@ resource "google_compute_instance" "rhino_compute" {
     rhino_token = var.rhino_token
     repo_url    = var.repo_url
     repo_branch = var.repo_branch
+    api_key          = var.api_key
+    max_uptime_hours = var.max_uptime_hours
   })
 
   # Allow the VM to be stopped and restarted
