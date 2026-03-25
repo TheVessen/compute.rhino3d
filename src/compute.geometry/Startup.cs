@@ -227,12 +227,21 @@ namespace compute.geometry
                 var realPath = System.IO.File.ResolveLinkTarget(gha, returnFinalTarget: true)?.FullName ?? gha;
                 try
                 {
-                    // Pre-load DLLs so Rhino's broken GetRuntimeSpecificFolder is never invoked for them
+                    // Pre-load DLLs so Rhino's broken GetRuntimeSpecificFolder is never invoked for them.
+                    // Skip DLLs already in the AppDomain to avoid loading duplicate assemblies into
+                    // different load contexts, which breaks type-identity checks like `obj as GH_Component`.
                     var ghaDir = System.IO.Path.GetDirectoryName(realPath);
+                    var loadedNames = new System.Collections.Generic.HashSet<string>(
+                        AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name),
+                        StringComparer.OrdinalIgnoreCase);
                     foreach (var dll in System.IO.Directory.GetFiles(ghaDir, "*.dll"))
                     {
-                        try { System.Reflection.Assembly.LoadFrom(dll); }
-                        catch { }
+                        var dllName = System.IO.Path.GetFileNameWithoutExtension(dll);
+                        if (!loadedNames.Contains(dllName))
+                        {
+                            try { System.Reflection.Assembly.LoadFrom(dll); }
+                            catch { }
+                        }
                     }
 
                     var externalFile = externalFileCtor.Invoke(new object[] { realPath });
