@@ -54,6 +54,9 @@ apt update && apt install -y rhino-compute yak-cli
 echo ">>> Installing Selva plugin..."
 HOME=/root yak install selva
 
+echo ">>> Installing Hops plugin..."
+HOME=/root yak install hops
+
 # ============================================================
 # 4. Fix NuGet config
 # ============================================================

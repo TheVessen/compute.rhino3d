@@ -36,17 +36,31 @@ namespace compute.geometry
 
         public static List<GH_Component> GetSchemaContextBakeComponents(GH_Document doc)
         {
-            return doc.Objects
+            // First try to find ContextBakeComponent (requires the plugin to be loaded)
+            var viaBake = doc.Objects
                 .Where(o => o.GetType().Name == "ContextBakeComponent")
                 .OfType<GH_Component>()
                 .Where(c => c.Params.Input.Count > 0
                     && c.Params.Input[0].Sources.Any(s => s.NickName == "Schema"))
                 .ToList();
+
+            if (viaBake.Count > 0)
+                return viaBake;
+
+            // Fallback: find GH_UIBuilderComponent directly (Context Bake plugin may not be installed)
+            return doc.Objects
+                .Where(o => o.GetType().Name == "GH_UIBuilderComponent")
+                .OfType<GH_Component>()
+                .ToList();
         }
 
-        public static IGH_DocumentObject GetSchemaParentComponent(GH_Component contextBake)
+        public static IGH_DocumentObject GetSchemaParentComponent(GH_Component contextBakeOrUiBuilder)
         {
-            var source = contextBake.Params.Input[0].Sources.FirstOrDefault(s => s.NickName == "Schema");
+            // If this is already a GH_UIBuilderComponent, return it directly
+            if (contextBakeOrUiBuilder.GetType().Name == "GH_UIBuilderComponent")
+                return contextBakeOrUiBuilder;
+
+            var source = contextBakeOrUiBuilder.Params.Input[0].Sources.FirstOrDefault(s => s.NickName == "Schema");
             return source?.Attributes?.GetTopLevel?.DocObject;
         }
 

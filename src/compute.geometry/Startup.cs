@@ -166,8 +166,11 @@ namespace compute.geometry
 
             System.IO.Directory.CreateDirectory(ghLibraries);
 
+            // Group GHAs by filename, preferring net7+/net8+/net9+ over net48
             var packageDirs = System.IO.Directory.GetFiles(packagesDir, "*.gha", System.IO.SearchOption.AllDirectories)
-                .Where(f => f.Contains("/net7.0/") || f.Contains("/net8.0/") || f.Contains("/net9.0/"))
+                .GroupBy(f => System.IO.Path.GetFileName(f))
+                .Select(g => g.OrderByDescending(f =>
+                    f.Contains("/net7.0/") || f.Contains("/net8.0/") || f.Contains("/net9.0/") ? 1 : 0).First())
                 .Select(f => System.IO.Path.GetDirectoryName(f))
                 .Distinct();
 
