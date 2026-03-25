@@ -115,8 +115,10 @@ namespace compute.geometry
 #if LINUX
                 LinkYakPackagesToGHLibraries();
                 var ghpath = RhinoInside.Resolver.RhinoSystemDirectory + "/Plug-ins/Grasshopper/GrasshopperPlugin.rhp";
-                Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
+                var ghLoadResult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
+                Log.Information("GH load: {Result}, id: {Id}", ghLoadResult, ghid);
                 var pluginObject = Rhino.RhinoApp.GetPlugInObject(ghid) as Grasshopper.Plugin.GH_RhinoScriptInterface;
+                Log.Information("GH plugin object: {Status}", pluginObject == null ? "null" : "ok");
                 if (pluginObject != null)
                 {
                     pluginObject.RunHeadless();
