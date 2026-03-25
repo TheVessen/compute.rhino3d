@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Routing;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Rhino.PlugIns;
+using Serilog;
 
 namespace compute.geometry
 {
@@ -85,8 +86,12 @@ namespace compute.geometry
 
         static async Task GetGrasshopperSchema(HttpContext ctx)
         {
+            Log.Debug("grasshopper/schema: method={Method} hasForm={HasForm} fileCount={FileCount}",
+                ctx.Request.Method, ctx.Request.HasFormContentType, ctx.Request.HasFormContentType ? ctx.Request.Form.Files.Count : 0);
+
             if (ctx.Request.Method == "GET" || !ctx.Request.HasFormContentType || ctx.Request.Form.Files.Count == 0)
             {
+                Log.Debug("grasshopper/schema: returning endpoint description (no files uploaded)");
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new
                 {
@@ -103,6 +108,7 @@ namespace compute.geometry
             foreach (var file in ctx.Request.Form.Files)
             {
                 var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : file.Name;
+                Log.Debug("grasshopper/schema: processing file={FileName} size={Size}", fileName, file.Length);
                 try
                 {
                     using var stream = file.OpenReadStream();
@@ -110,12 +116,24 @@ namespace compute.geometry
                     stream.CopyTo(mem);
 
                     var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
-                    if (archive == null) { results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.")); continue; }
+                    if (archive == null)
+                    {
+                        Log.Warning("grasshopper/schema: failed to load archive for file={FileName}", fileName);
+                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.")); continue;
+                    }
 
                     var doc = GrasshopperValidationHelper.DocumentFromArchive(archive);
-                    if (doc == null) { results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.")); continue; }
+                    if (doc == null)
+                    {
+                        Log.Warning("grasshopper/schema: failed to extract document from archive for file={FileName}", fileName);
+                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.")); continue;
+                    }
+
+                    Log.Debug("grasshopper/schema: document loaded, objectCount={Count}", doc.ObjectCount);
 
                     var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
+                    Log.Debug("grasshopper/schema: found {Count} schema Context Bake component(s) in file={FileName}", schemaComponents.Count, fileName);
+
                     if (schemaComponents.Count == 0)
                     {
                         results.Add(GrasshopperValidationHelper.ErrorResult(fileName,
@@ -131,9 +149,12 @@ namespace compute.geometry
                     foreach (var component in schemaComponents)
                     {
                         var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
+                        Log.Debug("grasshopper/schema: schema parent component type={Type}", parent?.GetType().Name ?? "null");
+
                         if (parent?.GetType().Name != "GH_UIBuilderComponent")
                         {
                             error = "The 'Schema' source is not coming from a 'UI Builder' component.";
+                            Log.Warning("grasshopper/schema: {Error} (got {Type})", error, parent?.GetType().Name ?? "null");
                             break;
                         }
 
@@ -141,9 +162,11 @@ namespace compute.geometry
                         if (schema == null)
                         {
                             error = "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.";
+                            Log.Warning("grasshopper/schema: {Error}", error);
                             break;
                         }
 
+                        Log.Debug("grasshopper/schema: extracted schema successfully from file={FileName}", fileName);
                         schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
                     }
 
@@ -153,6 +176,7 @@ namespace compute.geometry
                 }
                 catch (Exception ex)
                 {
+                    Log.Error(ex, "grasshopper/schema: exception processing file={FileName}", fileName);
                     results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
                 }
             }
