@@ -130,6 +130,8 @@ namespace compute.geometry
                     }
 
                     Log.Information("grasshopper/schema: document loaded, objectCount={Count}", doc.ObjectCount);
+                    var allTypes = string.Join(", ", doc.Objects.Select(o => o.GetType().Name).Distinct().OrderBy(n => n));
+                    Log.Information("grasshopper/schema: component types in document: {Types}", allTypes);
 
                     var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
                     Log.Information("grasshopper/schema: found {Count} schema Context Bake component(s) in file={FileName}", schemaComponents.Count, fileName);
