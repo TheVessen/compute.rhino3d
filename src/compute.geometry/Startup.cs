@@ -222,34 +222,25 @@ namespace compute.geometry
 
             var cs = Grasshopper.Instances.ComponentServer;
             var csType = cs.GetType();
-            var loadMethod = csType.GetMethod("LoadAssembly",
+            var loadMethod = csType.GetMethod("LoadExternalFiles",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
-                null, new[] { typeof(System.IO.FileInfo) }, null);
+                null, new[] { typeof(bool) }, null);
 
             if (loadMethod == null)
             {
-                var allMethods = csType
-                    .GetMethods(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-                    .Where(m => m.Name.ToLower().Contains("load") || m.Name.ToLower().Contains("assembl"))
-                    .Select(m => $"{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name))})");
-                Log.Warning("GH_ComponentServer.LoadAssembly(FileInfo) not found. Available methods: {Methods}", string.Join(", ", allMethods));
+                Log.Warning("GH_ComponentServer.LoadExternalFiles(Boolean) not found — cannot load GHA plugins");
                 return;
             }
 
-            foreach (var gha in System.IO.Directory.GetFiles(ghLibraries, "*.gha"))
+            try
             {
-                try
-                {
-                    loadMethod.Invoke(cs, new object[] { new System.IO.FileInfo(gha) });
-                    Log.Information("Loaded GHA: {Name}", System.IO.Path.GetFileName(gha));
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Failed to load GHA: {Name}", System.IO.Path.GetFileName(gha));
-                }
+                loadMethod.Invoke(cs, new object[] { false });
+                Log.Information("GH loaded assemblies after LoadExternalFiles: {Count}", cs.Libraries?.Count ?? -1);
             }
-
-            Log.Information("GH loaded assemblies after explicit load: {Count}", cs.Libraries?.Count ?? -1);
+            catch (Exception ex)
+            {
+                Log.Error(ex, "LoadExternalFiles failed");
+            }
         }
 #endif
 
