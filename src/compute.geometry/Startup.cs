@@ -113,7 +113,7 @@ namespace compute.geometry
             {
                 Log.Information("(3/4) Loading grasshopper");
 #if LINUX
-                LinkYakPackagesToGHLibraries();
+                // LinkYakPackagesToGHLibraries();
                 var ghpath = RhinoInside.Resolver.RhinoSystemDirectory + "/Plug-ins/Grasshopper/GrasshopperPlugin.rhp";
                 var ghLoadResult = Rhino.PlugIns.PlugIn.LoadPlugIn(ghpath, out Guid ghid);
                 Log.Information("GH load: {Result}, id: {Id}", ghLoadResult, ghid);
