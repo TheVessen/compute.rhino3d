@@ -99,6 +99,11 @@ gcloud auth application-default login
   ```bash
   sudo systemctl stop rhino-compute
   ```
+- **Install plugins via Yak:**
+  ```bash
+  sudo yak install plugin-name
+  ```
+  Always use `sudo` so plugins install to `/root/.local/share/mcneel/rhinoceros/packages/9.0/` where the service can find them.
 - **Stop VM (stops all billing except disk):**
   ```bash
   gcloud compute instances stop rhino-compute-server --zone=europe-west6-a

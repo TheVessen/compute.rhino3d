@@ -47,6 +47,10 @@ echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
 
 apt update && apt install -y rhino-compute yak-cli
 
+# Configure Yak to always use root's home directory
+export HOME=/root
+export YAK_DATA_DIR=/root/.config/Yak
+
 # ============================================================
 # 4. Fix NuGet config
 # ============================================================
