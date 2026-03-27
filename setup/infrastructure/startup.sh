@@ -47,45 +47,6 @@ echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
 
 apt update && apt install -y rhino-compute yak-cli
 
-# Make yak always use /root as HOME so packages install where the service can find them
-echo 'alias yak="HOME=/root yak"' >> /etc/bash.bashrc
-
-# ============================================================
-# 3b. Install Selva plugin via Yak and link into GH Libraries folder
-# Run as root so packages land in /root/.local/share (where the service looks)
-# GH on Linux scans /root/.config/Grasshopper/Libraries/ — Yak packages dir is NOT scanned
-# ============================================================
-echo ">>> Installing Selva plugin..."
-HOME=/root yak install selva
-
-echo ">>> Installing Hops plugin..."
-HOME=/root yak install hops
-
-# ============================================================
-# 3c. Pre-create GH Libraries symlinks before service starts
-# RunHeadless() on Rhino 9 Linux recreates the GH config dir on first boot,
-# wiping any symlinks the C# startup code created. By creating them here
-# (before the service starts), they survive first-time initialization.
-# The C# code handles packages installed later.
-# ============================================================
-echo ">>> Pre-creating GH Libraries symlinks..."
-GH_LIBS=/root/.config/Grasshopper/Libraries
-PKG_DIR=/root/.local/share/mcneel/rhinoceros/packages/9.0
-mkdir -p "$GH_LIBS"
-
-# For each package, find GHAs — prefer net7.0/net8.0/net9.0 over net48
-for pkg in "$PKG_DIR"/*/; do
-  [ -d "$pkg" ] || continue
-  # Collect all GHAs; sort so net[7-9] paths come last (highest), pick last
-  gha=$(find "$pkg" -name "*.gha" | sort | tail -1)
-  [ -f "$gha" ] || continue
-  gha_dir="$(dirname "$gha")"
-  for f in "$gha_dir"/*.gha "$gha_dir"/*.dll; do
-    [ -f "$f" ] && ln -sf "$f" "$GH_LIBS/$(basename "$f")"
-  done
-done
-echo ">>> GH Libraries: $(ls "$GH_LIBS" 2>/dev/null | wc -l) files linked"
-
 # ============================================================
 # 4. Fix NuGet config
 # ============================================================
