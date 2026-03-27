@@ -176,6 +176,21 @@ terraform-rhino-compute/
 - **Build fails in VM:**
   - SSH in, check dotnet availability
   - Review `/var/log/rhino-compute-setup.log`
+- **terraform apply fails with "resource already exists" (409 error):**
+  - This happens when resources already exist in GCP but aren't tracked in your Terraform state (e.g., after migrating from another project)
+  - Import existing resources:
+    ```bash
+    # Import static IP
+    terraform import google_compute_address.rhino_compute_ip projects/rhino-compute-prod/regions/europe-west6/addresses/rhino-compute-ip
+
+    # Import firewall rules
+    terraform import google_compute_firewall.allow_rhino_compute projects/rhino-compute-prod/global/firewalls/allow-rhino-compute
+    terraform import google_compute_firewall.allow_ssh projects/rhino-compute-prod/global/firewalls/allow-ssh-rhino-compute
+
+    # Import compute instance
+    terraform import google_compute_instance.rhino_compute projects/rhino-compute-prod/zones/europe-west6-a/instances/rhino-compute-server
+    ```
+  - After imports succeed, Terraform will manage these resources and won't try to create duplicates
 
 ## Common Commands
 
