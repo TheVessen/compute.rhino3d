@@ -1184,12 +1184,15 @@ namespace compute.geometry
                             resthopperObjectList.Add(GetResthopperObject<Color>(rhValue,paramId, rhinoVersion));
                         }
                             break;
+
                         
                         // Display Oject for ThreeJS
                         case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
                                                  (gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                   gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                  gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0 ) :
+                                                  gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                    gooObj.GetType().FullName.IndexOf("PlotlyFigure", StringComparison.OrdinalIgnoreCase) >= 0
+                                                  ) :
                         {
                             // Use reflection to get the Value property
                             var valueProp = gooObj.GetType().GetProperty("Value");
