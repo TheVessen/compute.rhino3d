@@ -86,7 +86,13 @@ namespace compute.geometry
         
         static async Task GetGrasshopperSchema(HttpContext ctx)
         {
-            if (ctx.Request.Method == "GET" || !ctx.Request.HasFormContentType || ctx.Request.Form.Files.Count == 0)
+            // GET or empty POST → return usage info
+            bool hasFiles = ctx.Request.HasFormContentType && ctx.Request.Form.Files.Count > 0;
+            bool hasJsonBody = !ctx.Request.HasFormContentType
+                && ctx.Request.ContentType != null
+                && ctx.Request.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase);
+
+            if (ctx.Request.Method == "GET" || (!hasFiles && !hasJsonBody))
             {
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new
@@ -94,72 +100,121 @@ namespace compute.geometry
                     endpoint = "grasshopper/schema",
                     status = "available",
                     description = "Extracts the embedded schema from Grasshopper definition files (.gh/.ghx). Returns the full schema (inputs, outputs, metadata) when the definition is correctly wired (Context Bake → UI Builder with an embedded schema).",
-                    usage = "POST multipart/form-data with one or more .gh or .ghx files."
+                    usage = new
+                    {
+                        file_upload = "POST multipart/form-data with one or more .gh or .ghx files.",
+                        url = "POST application/json with { \"urls\": [\"https://…/file.gh\"] } or { \"url\": \"https://…/file.gh\" }."
+                    }
                 }));
                 return;
             }
 
             var results = new List<JObject>();
 
-            foreach (var file in ctx.Request.Form.Files)
+            if (hasFiles)
             {
-                var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : file.Name;
-                try
+                foreach (var file in ctx.Request.Form.Files)
                 {
-                    using var stream = file.OpenReadStream();
-                    using var mem = new MemoryStream();
-                    stream.CopyTo(mem);
-
-                    var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
-                    if (archive == null) { results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.")); continue; }
-
-                    var doc = GrasshopperValidationHelper.DocumentFromArchive(archive);
-                    if (doc == null) { results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.")); continue; }
-
-                    var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
-                    if (schemaComponents.Count == 0)
+                    var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : file.Name;
+                    try
                     {
-                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName,
-                            "This definition has no outputs defined. " +
-                            "Add a 'Context Bake' component, connect a 'UI Builder' component to its first input, " +
-                            "and make sure the Schema output param is named 'Schema'."));
-                        continue;
+                        using var stream = file.OpenReadStream();
+                        using var mem = new MemoryStream();
+                        stream.CopyTo(mem);
+
+                        var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
+                        results.Add(ExtractSchemaFromArchive(fileName, archive));
                     }
-
-                    var schemas = new JArray();
-                    string error = null;
-
-                    foreach (var component in schemaComponents)
+                    catch (Exception ex)
                     {
-                        var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
-                        if (parent?.GetType().Name != "GH_UIBuilderComponent")
-                        {
-                            error = "The 'Schema' source is not coming from a 'UI Builder' component.";
-                            break;
-                        }
-
-                        var schema = GrasshopperValidationHelper.GetEmbeddedSchema(parent);
-                        if (schema == null)
-                        {
-                            error = "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.";
-                            break;
-                        }
-
-                        schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
+                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
                     }
-
-                    results.Add(error != null
-                        ? GrasshopperValidationHelper.ErrorResult(fileName, error)
-                        : GrasshopperValidationHelper.SuccessResult(fileName, schemas));
                 }
-                catch (Exception ex)
+            }
+            else // JSON body with URLs
+            {
+                string body;
+                using (var reader = new StreamReader(ctx.Request.Body))
+                    body = await reader.ReadToEndAsync();
+
+                JObject json;
+                try { json = JObject.Parse(body); }
+                catch { json = null; }
+
+                if (json == null)
                 {
-                    results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
+                    ctx.Response.StatusCode = 400;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Invalid JSON body." }));
+                    return;
+                }
+
+                // Accept either { "url": "..." } or { "urls": ["...", ...] }
+                var urls = new List<string>();
+                if (json["urls"] is JArray arr)
+                    urls.AddRange(arr.Values<string>().Where(u => !string.IsNullOrWhiteSpace(u)));
+                else if (json["url"] is JValue single && single.Type == JTokenType.String)
+                    urls.Add(single.Value<string>());
+
+                if (urls.Count == 0)
+                {
+                    ctx.Response.StatusCode = 400;
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Provide 'url' or 'urls' in the JSON body." }));
+                    return;
+                }
+
+                foreach (var url in urls)
+                {
+                    var fileName = url;
+                    try
+                    {
+                        var archive = await GrasshopperValidationHelper.ArchiveFromUrlAsync(url);
+                        results.Add(ExtractSchemaFromArchive(fileName, archive));
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
+                    }
                 }
             }
 
             ctx.Response.ContentType = "application/json";
             await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(results));
+        }
+
+        static JObject ExtractSchemaFromArchive(string fileName, GH_Archive archive)
+        {
+            if (archive == null)
+                return GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.");
+
+            var doc = GrasshopperValidationHelper.DocumentFromArchive(archive);
+            if (doc == null)
+                return GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.");
+
+            var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
+            if (schemaComponents.Count == 0)
+                return GrasshopperValidationHelper.ErrorResult(fileName,
+                    "This definition has no outputs defined. " +
+                    "Add a 'Context Bake' component, connect a 'UI Builder' component to its first input, " +
+                    "and make sure the Schema output param is named 'Schema'.");
+
+            var schemas = new JArray();
+            foreach (var component in schemaComponents)
+            {
+                var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
+                if (parent?.GetType().Name != "GH_UIBuilderComponent")
+                    return GrasshopperValidationHelper.ErrorResult(fileName, "The 'Schema' source is not coming from a 'UI Builder' component.");
+
+                var schema = GrasshopperValidationHelper.GetEmbeddedSchema(parent);
+                if (schema == null)
+                    return GrasshopperValidationHelper.ErrorResult(fileName,
+                        "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.");
+
+                schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
+            }
+
+            return GrasshopperValidationHelper.SuccessResult(fileName, schemas);
         }
     }
 }

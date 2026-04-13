@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
+using System.Threading.Tasks;
 using GH_IO.Serialization;
 using Grasshopper.Kernel;
 using Newtonsoft.Json.Linq;
@@ -11,6 +13,28 @@ namespace compute.geometry
 {
     internal static class GrasshopperValidationHelper
     {
+        static readonly HttpClient _http = new HttpClient();
+
+        public static async Task<GH_Archive> ArchiveFromUrlAsync(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return null;
+
+            if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                // Local file path
+                if (!File.Exists(url))
+                    throw new FileNotFoundException($"File not found: {url}");
+                var archive = new GH_Archive();
+                if (archive.ReadFromFile(url))
+                    return archive;
+                return null;
+            }
+
+            var bytes = await _http.GetByteArrayAsync(url);
+            return ArchiveFromBytes(bytes);
+        }
+
         public static GH_Archive ArchiveFromBytes(byte[] byteArray)
         {
             try
