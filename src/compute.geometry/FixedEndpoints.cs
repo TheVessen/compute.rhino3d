@@ -23,7 +23,9 @@ namespace compute.geometry
             app.MapGet("servertime", ServerTime);
             app.MapGet("plugins/rhino/installed", GetInstalledPluginsRhino);
             app.MapGet("plugins/gh/installed", GetInstalledPluginsGrasshopper);
-            app.MapPost("grasshopper/schema", GetGrasshopperSchema);
+            app.MapGet("grasshopper/schema", GetGrasshopperSchemaInfo);
+            app.MapPost("grasshopper/schema", GetGrasshopperSchemaFromFiles);
+            app.MapPost("grasshopper/schema/url", GetGrasshopperSchemaFromUrl);
         }
 
         static void HomePage(HttpContext context)
@@ -84,98 +86,100 @@ namespace compute.geometry
             await ctx.Response.WriteAsJsonAsync(ghPluginInfo);
         }
         
-        static async Task GetGrasshopperSchema(HttpContext ctx)
+        static async Task GetGrasshopperSchemaInfo(HttpContext ctx)
         {
-            // GET or empty POST → return usage info
-            bool hasFiles = ctx.Request.HasFormContentType && ctx.Request.Form.Files.Count > 0;
-            bool hasJsonBody = !ctx.Request.HasFormContentType
-                && ctx.Request.ContentType != null
-                && ctx.Request.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase);
-
-            if (ctx.Request.Method == "GET" || (!hasFiles && !hasJsonBody))
+            ctx.Response.ContentType = "application/json";
+            await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new
+                endpoint = "grasshopper/schema",
+                status = "available",
+                description = "Extracts the embedded schema from Grasshopper definition files (.gh/.ghx). Returns the full schema (inputs, outputs, metadata) when the definition is correctly wired (Context Bake → UI Builder with an embedded schema).",
+                usage = new
                 {
-                    endpoint = "grasshopper/schema",
-                    status = "available",
-                    description = "Extracts the embedded schema from Grasshopper definition files (.gh/.ghx). Returns the full schema (inputs, outputs, metadata) when the definition is correctly wired (Context Bake → UI Builder with an embedded schema).",
-                    usage = new
-                    {
-                        file_upload = "POST multipart/form-data with one or more .gh or .ghx files.",
-                        url = "POST application/json with { \"urls\": [\"https://…/file.gh\"] } or { \"url\": \"https://…/file.gh\" }."
-                    }
-                }));
+                    file_upload = "POST grasshopper/schema — multipart/form-data with one or more .gh or .ghx files.",
+                    url = "POST grasshopper/schema/url — application/json with { \"urls\": [\"https://…/file.gh\"] } or { \"url\": \"https://…/file.gh\" }."
+                }
+            }));
+        }
+
+        static async Task GetGrasshopperSchemaFromFiles(HttpContext ctx)
+        {
+            var form = await ctx.Request.ReadFormAsync();
+
+            if (form.Files.Count == 0)
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "No files provided. POST multipart/form-data with one or more .gh or .ghx files." }));
                 return;
             }
 
             var results = new List<JObject>();
-
-            if (hasFiles)
+            foreach (var file in form.Files)
             {
-                foreach (var file in ctx.Request.Form.Files)
+                var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : file.Name;
+                try
                 {
-                    var fileName = !string.IsNullOrEmpty(file.FileName) ? file.FileName : file.Name;
-                    try
-                    {
-                        using var stream = file.OpenReadStream();
-                        using var mem = new MemoryStream();
-                        stream.CopyTo(mem);
+                    using var stream = file.OpenReadStream();
+                    using var mem = new MemoryStream();
+                    await stream.CopyToAsync(mem);
 
-                        var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
-                        results.Add(ExtractSchemaFromArchive(fileName, archive));
-                    }
-                    catch (Exception ex)
-                    {
-                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
-                    }
+                    var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
+                    results.Add(ExtractSchemaFromArchive(fileName, archive));
+                }
+                catch (Exception ex)
+                {
+                    results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
                 }
             }
-            else // JSON body with URLs
+
+            ctx.Response.ContentType = "application/json";
+            await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(results));
+        }
+
+        static async Task GetGrasshopperSchemaFromUrl(HttpContext ctx)
+        {
+            string body;
+            using (var reader = new StreamReader(ctx.Request.Body))
+                body = await reader.ReadToEndAsync();
+
+            JObject json;
+            try { json = JObject.Parse(body); }
+            catch { json = null; }
+
+            if (json == null)
             {
-                string body;
-                using (var reader = new StreamReader(ctx.Request.Body))
-                    body = await reader.ReadToEndAsync();
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Invalid JSON body." }));
+                return;
+            }
 
-                JObject json;
-                try { json = JObject.Parse(body); }
-                catch { json = null; }
+            var urls = new List<string>();
+            if (json["urls"] is JArray arr)
+                urls.AddRange(arr.Values<string>().Where(u => !string.IsNullOrWhiteSpace(u)));
+            else if (json["url"] is JValue single && single.Type == JTokenType.String)
+                urls.Add(single.Value<string>());
 
-                if (json == null)
+            if (urls.Count == 0)
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Provide 'url' or 'urls' in the JSON body." }));
+                return;
+            }
+
+            var results = new List<JObject>();
+            foreach (var url in urls)
+            {
+                try
                 {
-                    ctx.Response.StatusCode = 400;
-                    ctx.Response.ContentType = "application/json";
-                    await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Invalid JSON body." }));
-                    return;
+                    var archive = await GrasshopperValidationHelper.ArchiveFromUrlAsync(url);
+                    results.Add(ExtractSchemaFromArchive(url, archive));
                 }
-
-                // Accept either { "url": "..." } or { "urls": ["...", ...] }
-                var urls = new List<string>();
-                if (json["urls"] is JArray arr)
-                    urls.AddRange(arr.Values<string>().Where(u => !string.IsNullOrWhiteSpace(u)));
-                else if (json["url"] is JValue single && single.Type == JTokenType.String)
-                    urls.Add(single.Value<string>());
-
-                if (urls.Count == 0)
+                catch (Exception ex)
                 {
-                    ctx.Response.StatusCode = 400;
-                    ctx.Response.ContentType = "application/json";
-                    await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Provide 'url' or 'urls' in the JSON body." }));
-                    return;
-                }
-
-                foreach (var url in urls)
-                {
-                    var fileName = url;
-                    try
-                    {
-                        var archive = await GrasshopperValidationHelper.ArchiveFromUrlAsync(url);
-                        results.Add(ExtractSchemaFromArchive(fileName, archive));
-                    }
-                    catch (Exception ex)
-                    {
-                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, ex.Message));
-                    }
+                    results.Add(GrasshopperValidationHelper.ErrorResult(url, ex.Message));
                 }
             }
 
