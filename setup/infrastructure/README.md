@@ -116,13 +116,23 @@ gcloud auth application-default login
   ```bash
   sudo journalctl -u rhino-compute -f
   ```
-- **Update code:**
+- **Update code (and plugins):**
   ```bash
   sudo systemctl stop rhino-compute
+
+  # Update source
   cd /opt/rhino-compute-src
   sudo git pull
   cd src
   sudo /usr/share/dotnet/dotnet build compute.sln -c Release
+
+  # Update plugins — yak has no `update`, so uninstall + install per plugin.
+  # List installed plugins first:
+  sudo yak list
+  # Then for each one you want to bump:
+  sudo yak uninstall <plugin-name>
+  sudo yak install <plugin-name>
+
   sudo systemctl start rhino-compute
   ```
 
