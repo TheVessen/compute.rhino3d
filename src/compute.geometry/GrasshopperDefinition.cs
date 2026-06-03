@@ -866,6 +866,7 @@ namespace compute.geometry
                 }
 
                 if (inputGroup.Param is Param_Mesh)
+                if (inputGroup.Param is Param_Mesh)
                 {
                     foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
                     {
@@ -1179,17 +1180,42 @@ namespace compute.geometry
                                 resthopperObjectList.Add(GetResthopperObject<Color>(rhValue, paramId, rhinoVersion));
                             }
                             break;
+                        
+                        // Selva SDK seam: any Goo implementing ISelvaSerializableGoo (matched by
+                        // interface name, not assembly reference) owns its compute JSON. New Selva
+                        // output Goo types plug in here with zero fork changes. See Selva.GH
+                        // ISelvaSerializableGoo. The wire Type stays the unwrapped value's type name so
+                        // the client demux is unchanged from the previous allowlist behaviour.
+                        case IGH_Goo gooObj when TryGetSelvaGooJson(gooObj, out string selvaJson):
+                            {
+                                // Mirror TryGetSelvaGooJson's unwrap so Type derives from the inner goo.
+                                var innerGoo = gooObj is GH_ObjectWrapper w && w.Value is IGH_Goo ig ? ig : gooObj;
+                                var value = innerGoo.GetType().GetProperty("Value")?.GetValue(innerGoo);
+                                var rhObj = new ResthopperObject
+                                {
+                                    Type = (value ?? innerGoo).GetType().FullName,
+                                    Id = paramId,
+                                    Data = selvaJson
+                                };
+                                resthopperObjectList.Add(rhObj);
+                                break;
+                            }
 
-
-                        // Display Oject for ThreeJS
+                        // DEPRECATED — DELETE THIS ENTIRE case BLOCK in a future major.
+                        // Purpose: serialize Selva output Goos from OLD plugin builds (Selva.GH +
+                        // selva-canopy) that predate ISelvaSerializableGoo. New Goos match the marker case
+                        // above and never reach here; this only catches an old .gha solved by a newer
+                        // compute (the one update-order we can't control).
+                        // Safe to remove once every deployed Selva-family plugin ships the marker
+                        // (Selva.GH: all four goos; selva-canopy: PlotlyFigure). Nothing in those plugins
+                        // needs deleting alongside it — the marker IS the replacement. This is the only
+                        // forward-compat shim; deleting it leaves just the marker case.
                         case IGH_Goo gooObj when gooObj.GetType().FullName != null &&
                                                  (gooObj.GetType().FullName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                   gooObj.GetType().FullName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                   gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                    gooObj.GetType().FullName.IndexOf("PlotlyFigure", StringComparison.OrdinalIgnoreCase) >= 0
-                                                  ):
+                                                  gooObj.GetType().FullName.IndexOf("PlotlyFigure", StringComparison.OrdinalIgnoreCase) >= 0):
                             {
-                                // Use reflection to get the Value property
                                 var valueProp = gooObj.GetType().GetProperty("Value");
                                 var value = valueProp?.GetValue(gooObj);
                                 resthopperObjectList.Add(GetResthopperObject<object>(value, paramId, rhinoVersion));
@@ -1232,6 +1258,41 @@ namespace compute.geometry
                     }
                 }
             }
+        }
+
+        // ============================================================================
+        // Selva SDK seam (reflection-based, no plugin assembly reference)
+        // ============================================================================
+
+        // True when the type (or any implemented interface) is named exactly `interfaceName`. Matched
+        // by simple name so every Selva-family plugin can declare its own copy of the contract interface
+        // without a shared assembly. See Selva.GH ISelvaOutput / ISelvaSerializableGoo.
+        static bool ImplementsSelvaInterface(Type type, string interfaceName)
+        {
+            foreach (var i in type.GetInterfaces())
+            {
+                if (i.Name == interfaceName)
+                    return true;
+            }
+
+            return false;
+        }
+
+        // True when a Goo owns its compute wire format (ISelvaSerializableGoo.ToComputeJson()).
+        // Unwraps GH_ObjectWrapper: custom Selva goo arrives wrapped on a generic ContextBake input,
+        // so the interface check must run against the inner goo, not the wrapper.
+        static bool TryGetSelvaGooJson(IGH_Goo goo, out string json)
+        {
+            json = null;
+            if (goo is GH_ObjectWrapper wrapper && wrapper.Value is IGH_Goo innerGoo)
+                goo = innerGoo;
+
+            Type t = goo.GetType();
+            if (!ImplementsSelvaInterface(t, "ISelvaSerializableGoo"))
+                return false;
+
+            json = t.GetMethod("ToComputeJson")?.Invoke(goo, null) as string;
+            return json != null;
         }
 
         static string ParamTypeName(IGH_Param param)
