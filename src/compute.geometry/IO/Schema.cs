@@ -154,17 +154,17 @@ namespace Resthopper.IO
         public List<SchemaDataFormat> SupportedDataFormats { get; set; } = new List<SchemaDataFormat>();
     }
 
-    public class HTTPRecord
+    public class HttpRecord
     {
-        public HTTPRecord()
+        public HttpRecord()
         {
 
         }
         [JsonProperty("iorequest")]
-        public string IORequest { get; set; }
+        public string IoRequest { get; set; }
 
         [JsonProperty("ioresponse")]
-        public string IOResponse { get; set; }
+        public string IoResponse { get; set; }
 
         [JsonProperty("solverequest")]
         public string SolveRequest { get; set; }
@@ -176,7 +176,7 @@ namespace Resthopper.IO
         public Schema Schema { get; set; }
 
         [JsonProperty("ioresponseschema")]
-        public IoResponseSchema IOResponseSchema { get; set; }
+        public IoResponseSchema IoResponseSchema { get; set; }
     }
 
     public class ResthopperObject : IEquatable<ResthopperObject>

@@ -45,6 +45,12 @@ of this handle and will shut down when this process has exited")]
               HelpText = "Create a new headless Rhino doc upon each received request (default: false)")]
             public bool? CreateHeadlessDoc { get; set; }
 
+            [Option("block-private-urls",
+              Required = false,
+              Default = false,
+              HelpText = "When set, compute.geometry refuses to fetch server-side URLs whose hostname resolves to a private, loopback, or link-local IP address. Recommended for public-facing deployments to defend against SSRF attacks targeting cloud metadata endpoints (e.g. 169.254.169.254 on AWS/Azure/GCP) and internal LAN services. Default is off so deployments fetching from internal hosts continue to work.")]
+            public bool BlockPrivateUrls { get; set; }
+
             [Option("idlespan",
              Required = false,
              HelpText =
@@ -81,6 +87,12 @@ requests while the child processes are launching.")]
              HelpText = "Determines whether to launch a child compute.geometry process when rhino.compute gets started")]
             public bool SpawnOnStartup { get; set; }
 
+            [Option("load-children-sequentially",
+             Required = false,
+             Default = false,
+             HelpText = "When set, child compute.geometry processes spawn one at a time (each child finishes loading before the next starts). Default is parallel spawning for faster warmup. Use this on memory-constrained VMs where N parallel Rhino+Grasshopper loads can exhaust RAM.")]
+            public bool LoadChildrenSequentially { get; set; }
+
             [Option("timeout",
               Required = false,
               HelpText = "Request timeout in seconds (default: 100)")]
@@ -91,8 +103,8 @@ requests while the child processes are launching.")]
 
         }
 
-        static System.Diagnostics.Process _parentProcess;
-        static System.Timers.Timer _selfDestructTimer;
+        static System.Diagnostics.Process parentProcess;
+        static System.Timers.Timer selfDestructTimer;
 
         public static void Main(string[] args)
         {
@@ -106,8 +118,16 @@ requests while the child processes are launching.")]
             var loggerConfig = new LoggerConfiguration()
             .MinimumLevel.Is(level)
             .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+            // Silence ASP.NET Core's built-in "An unhandled exception has occurred while
+            // executing the request." log emitted by ExceptionHandlerMiddleware. Our own
+            // app.UseExceptionHandler handler logs a categorized, formatted version with
+            // the same stack trace, so without this override the same exception shows up
+            // twice on the console.
+            .MinimumLevel.Override("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", LogEventLevel.Fatal)
             .Filter.ByExcluding("RequestPath in ['/healthcheck', '/favicon.ico']")
-            .WriteTo.Console(outputTemplate: "RC  [{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .WriteTo.Console(
+                outputTemplate: "RC  [{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+                theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Literate)
             .WriteTo.File(new ExpressionTemplate("RC   [{@t:HH:mm:ss} {@l:u3}] {@m}\n{@x}"), path, rollingInterval: RollingInterval.Day, retainedFileCountLimit: limit);
             Log.Logger = loggerConfig.CreateLogger();
 
@@ -130,14 +150,31 @@ requests while the child processes are launching.")]
                 if (o.CreateHeadlessDoc.HasValue)
                     Environment.SetEnvironmentVariable("RHINO_COMPUTE_CREATE_HEADLESS_DOC", o.CreateHeadlessDoc.Value ? "true" : "false");
 
-                // Set runtime options
-                ComputeChildren.SpawnCount = o.ChildCount;
+                // --block-private-urls enables SSRF protection in spawned compute.geometry
+                // children by setting the env var they read at startup. Only set when the
+                // flag is present so an external RHINO_COMPUTE_BLOCK_PRIVATE_URLS=true (set
+                // before launching rhino.compute) still takes effect without the flag.
+                if (o.BlockPrivateUrls)
+                    Environment.SetEnvironmentVariable("RHINO_COMPUTE_BLOCK_PRIVATE_URLS", "true");
+
+                // Set runtime options. ChildCount is capped at ComputeChildren.MaxChildren
+                // (same cap that protects the /launch?children=N endpoint) so the Config
+                // block below prints the actual-effective value and downstream code never
+                // sees an unsafe value.
+                int requestedChildren = o.ChildCount;
+                if (requestedChildren > ComputeChildren.MaxChildren)
+                {
+                    Log.Warning("--childcount capped from {Requested} to {Cap}", requestedChildren, ComputeChildren.MaxChildren);
+                    requestedChildren = ComputeChildren.MaxChildren;
+                }
+                ComputeChildren.SpawnCount = requestedChildren;
                 ComputeChildren.SpawnOnStartup = o.SpawnOnStartup;
+                ComputeChildren.LoadChildrenSequentially = o.LoadChildrenSequentially;
                 ComputeChildren.ChildIdleSpan = new System.TimeSpan(0, 0, o.IdleSpanSeconds);
                 ComputeChildren.RhinoSysDir = o.RhinoSysDir;
                 int parentProcessId = o.ChildOf;
                 if (parentProcessId > 0)
-                    _parentProcess = System.Diagnostics.Process.GetProcessById(parentProcessId);
+                    parentProcess = System.Diagnostics.Process.GetProcessById(parentProcessId);
                 port = o.Port;
                 
             }).WithNotParsed(errors =>
@@ -172,9 +209,9 @@ requests while the child processes are launching.")]
 
                 }).Build();
 
-            if(_parentProcess?.MainModule != null)
+            if(parentProcess?.MainModule != null)
             {
-                var parentPath = _parentProcess.MainModule.FileName;
+                var parentPath = parentProcess.MainModule.FileName;
                 if (Path.GetFileName(parentPath) == "Rhino.exe")
                 {
                     ComputeChildren.RhinoSysDir = Directory.GetParent(parentPath).FullName;
@@ -182,38 +219,62 @@ requests while the child processes are launching.")]
             }
 
             Log.Information($"Rhino compute started at {DateTime.Now.ToLocalTime()}");
+
+            // Loud warning if the proxy is starting unauthenticated. The ApiKeyMiddleware
+            // only wires up when Config.ApiKey is non-empty, so a missing key means every
+            // endpoint accepts any caller. Operators sometimes don't realize the env var
+            // didn't propagate (running process predates the setx, IIS app pool not
+            // recycled, etc.) — this surfaces the problem at startup instead of silently.
+            if (string.IsNullOrWhiteSpace(Config.ApiKey))
+                Log.Warning("RHINO_COMPUTE_KEY is not set; API authentication is disabled. All endpoints are open to any caller.");
+
             Log.Debug($"Config:");
             Log.Debug("  Max Request Size = {RequestSize}", (Config.MaxRequestSize / 1024.0 / 1024.0).ToString("F2") + " MB");
             Log.Debug("  Timeout = {Timeout}", FormatTimeout(Config.ReverseProxyRequestTimeout));
             Log.Debug("  Child Count = {ChildCount}", ComputeChildren.SpawnCount.ToString());
             Log.Debug("  Spawn Children At Startup = {SpawnChild}", ComputeChildren.SpawnOnStartup.ToString());
+            Log.Debug("  Load Children Sequentially = {LoadSequentially}", ComputeChildren.LoadChildrenSequentially.ToString());
             bool loadGrasshopper = true;
             loadGrasshopper = Boolean.TryParse(Environment.GetEnvironmentVariable("RHINO_COMPUTE_LOAD_GRASSHOPPER"), out var loadGH) ? loadGH : true;
             Log.Debug("  Load Grasshopper = {LoadGH}", loadGrasshopper.ToString());
             bool createHeadlessDoc = false;
             createHeadlessDoc = Boolean.TryParse(Environment.GetEnvironmentVariable("RHINO_COMPUTE_CREATE_HEADLESS_DOC"), out var createHeadless) ? createHeadless : false;
             Log.Debug("  Create Headless Document = {CreateHeadlessDoc}", createHeadlessDoc.ToString());
+            bool blockPrivateUrls = Boolean.TryParse(Environment.GetEnvironmentVariable("RHINO_COMPUTE_BLOCK_PRIVATE_URLS"), out var blockPrivate) && blockPrivate;
+            Log.Debug("  Block Private URLs = {BlockPrivateUrls}", blockPrivateUrls.ToString());
             Log.Debug("  Log Path = {LogPath}", Config.LogPath);
 
             var logger = host.Services.GetRequiredService<ILogger<ReverseProxyModule>>();
             ReverseProxyModule.InitializeConcurrentRequestLogging(logger);
 
-            if (_parentProcess != null)
+            // On clean shutdown of rhino.compute (Ctrl-C, IIS app pool recycle, host.StopAsync()
+            // from selfDestructTimer when parent exits), gracefully stop spawned compute.geometry
+            // children. Hard-crash scenarios (kill -9, segfault) bypass this hook — children fall
+            // back to the existing 5-second HasExited poll in their own Shutdown.cs TimerTask.
+            var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+            lifetime.ApplicationStopping.Register(() =>
             {
-                _selfDestructTimer = new System.Timers.Timer(1000);
-                _selfDestructTimer.Elapsed += (s, e) =>
+                Log.Information("rhino.compute shutting down; signaling compute.geometry children");
+                try { ComputeChildren.ShutdownChildren(); }
+                catch (Exception ex) { Log.Warning("Error during child shutdown: {Message}", ex.Message); }
+            });
+
+            if (parentProcess != null)
+            {
+                selfDestructTimer = new System.Timers.Timer(1000);
+                selfDestructTimer.Elapsed += (s, e) =>
                 {
-                    if (_parentProcess.HasExited)
+                    if (parentProcess.HasExited)
                     {
-                        _selfDestructTimer.Stop();
-                        _parentProcess = null;
+                        selfDestructTimer.Stop();
+                        parentProcess = null;
                         Console.WriteLine("self-destruct");
                         Log.Information($"Self-destruct called at {DateTime.Now.ToLocalTime()}");
                         host.StopAsync();
                     }
                 };
-                _selfDestructTimer.AutoReset = true;
-                _selfDestructTimer.Start();
+                selfDestructTimer.AutoReset = true;
+                selfDestructTimer.Start();
             }
             host.Run();
         }
@@ -234,9 +295,9 @@ requests while the child processes are launching.")]
 
         public static bool IsParentRhinoProcess(int processId)
         {
-            if (_parentProcess != null && _parentProcess.ProcessName.Contains("rhino", StringComparison.OrdinalIgnoreCase))
+            if (parentProcess != null && parentProcess.ProcessName.Contains("rhino", StringComparison.OrdinalIgnoreCase))
             {
-                return (_parentProcess.Id == processId);
+                return (parentProcess.Id == processId);
             }
             return false;
         }

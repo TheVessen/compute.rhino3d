@@ -7,9 +7,13 @@ on:
 #  schedule:
 #    - cron: '0 0 1 * *'
 
+permissions: {}
+
 jobs:
   version:
     if: github.ref == 'refs/heads/9.x'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version_step.outputs.version }}
@@ -20,7 +24,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.102'
+          dotnet-version: '10.0.102'
 
       - name: Update Version Numbers
         id: version_step
@@ -28,6 +32,8 @@ jobs:
 
   build-deb:
     if: github.ref == 'refs/heads/9.x'
+    permissions:
+      contents: read
     name: build deb ${{ matrix.package_arch }}
     needs: [version]
 
@@ -57,10 +63,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y debhelper devscripts build-essential
 
-      - name: Install dotnet 9.0
+      - name: Install dotnet 10.0
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.102'
+          dotnet-version: '10.0.102'
     
       - name: Checkout code
         uses: actions/checkout@v6
@@ -102,6 +108,8 @@ jobs:
 
   generate-deb-release:
     if: github.ref == 'refs/heads/9.x'
+    permissions:
+      contents: read
     needs: [build-deb]
     runs-on: ubuntu-latest
     steps:
@@ -154,6 +162,9 @@ jobs:
 
   build-rpm:
     if: github.ref == 'refs/heads/9.x'
+    permissions: 
+      contents: read
+      packages: read
     name: build rpm ${{ matrix.package_arch }}
     needs: [version]
 
@@ -170,8 +181,6 @@ jobs:
             package_arch: 'aarch64'
 
     runs-on: ${{ matrix.os }}
-    permissions: 
-      packages: read
     container:
       image: ${{ vars.RPM_COMPUTE_BUILDER_IMAGE }}
       credentials:
@@ -179,10 +188,10 @@ jobs:
         password: ${{ secrets.REPO_TOKEN }}
 
     steps:
-      - name: Install dotnet 9.0
+      - name: Install dotnet 10.0
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.102'
+          dotnet-version: '10.0.102'
     
       - name: Checkout code
         uses: actions/checkout@v6
@@ -278,14 +287,23 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           DIST_PATH="rpm/amazonlinux/2023/${{ matrix.package_arch }}"
-          mkdir -p local-mcneel-packages/${DIST_PATH}
-          aws s3 sync ${AWS_S3_BUCKET}/${DIST_PATH}/ local-mcneel-packages/${DIST_PATH}/
-          mv ~/rpmbuild/RPMS/${{ matrix.package_arch}}/*.rpm local-mcneel-packages/${DIST_PATH}/
-          createrepo_c --update local-mcneel-packages/${DIST_PATH}/
+
+          NEW=local-mcneel-packages/new/${DIST_PATH}
+          OLD=local-mcneel-packages/old/${DIST_PATH}
+          MERGED=local-mcneel-packages/merged/${DIST_PATH}
+
+          mkdir -p ${NEW} ${OLD}/repodata
+          mv ~/rpmbuild/RPMS/${{ matrix.package_arch }}/*.rpm ${NEW}/
+          createrepo_c ${NEW}/
+
+          aws s3 sync ${AWS_S3_BUCKET}/${DIST_PATH}/repodata/ ${OLD}/repodata/
+
+          mergerepo_c --repo ${OLD} --repo ${NEW} -o ${MERGED} --omit-baseurl
+
           echo "copying rpm to s3"
-          aws s3 sync local-mcneel-packages/${DIST_PATH}/ ${AWS_S3_BUCKET}/${DIST_PATH}/ --exclude "repodata/*"
+          aws s3 sync ${NEW}/ ${AWS_S3_BUCKET}/${DIST_PATH}/ --exclude "repodata/*"
           echo "copying repo data to s3"
-          aws s3 sync local-mcneel-packages/${DIST_PATH}/repodata/ ${AWS_S3_BUCKET}/${DIST_PATH}/repodata/ --delete
+          aws s3 sync ${MERGED}/repodata/ ${AWS_S3_BUCKET}/${DIST_PATH}/repodata/ --delete
 
   tag:
     needs: [ version, build-rpm, generate-deb-release ]

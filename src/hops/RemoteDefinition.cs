@@ -34,17 +34,17 @@ namespace Hops
             InvalidUrl //responding, but does not appear to have anything to do with solving
         }
 
-        HopsComponent _parentComponent;
-        Dictionary<string, Tuple<InputParamSchema, IGH_Param>> _inputParams;
-        Dictionary<string, IGH_Param> _outputParams;
-        string _description = null;
-        System.Drawing.Bitmap _customIcon = null;
-        string _path = null;
-        string _cacheKey = null;
-        public byte[] _internalizedDefinition = null;
-        const string _apiKeyName = "RhinoComputeKey";
-        public PathType? _pathType;
-        public string _filename = string.Empty;
+        HopsComponent parentComponent;
+        Dictionary<string, Tuple<InputParamSchema, IGH_Param>> inputParams;
+        Dictionary<string, IGH_Param> outputParams;
+        string description = null;
+        System.Drawing.Bitmap customIcon = null;
+        string path = null;
+        string cacheKey = null;
+        public byte[] internalizedDefinition = null;
+        const string API_KEY_NAME = "RhinoComputeKey";
+        public PathType? pathType;
+        public string filename = string.Empty;
 
         public static bool IsWebUrl(string path)
         {
@@ -53,6 +53,36 @@ namespace Hops
                 return uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps;
             }
             return false;
+        }
+
+        // Pull the human-readable "message" out of compute's JSON error body
+        // ({"error":...,"message":"...","stackTrace":[...]}) so the component shows a clean
+        // message instead of the raw JSON + stack trace. Falls back to the trimmed body for
+        // non-JSON responses (e.g. a plain-text 401).
+        static string ExtractServerErrorMessage(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+                return null;
+            string message = body.Trim();
+            try
+            {
+                if (Newtonsoft.Json.Linq.JToken.Parse(body) is Newtonsoft.Json.Linq.JObject obj)
+                {
+                    var m = obj["message"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(m))
+                        message = m;
+                }
+            }
+            catch (Exception)
+            {
+                // not JSON — keep the raw body
+            }
+            // compute.geometry's global exception handler prefixes unrecognized exception types
+            // with the type name (e.g. "HttpRequestException: ..."); strip it so the text is clean.
+            var match = System.Text.RegularExpressions.Regex.Match(message, @"^[A-Za-z0-9_.]+Exception:\s*");
+            if (match.Success)
+                message = message.Substring(match.Length);
+            return message;
         }
         private static bool IsGrasshopperDefinition(string filename)
         {
@@ -65,7 +95,7 @@ namespace Hops
             return false;
         }
 
-        SchemaDataFormat _dataFormat = SchemaDataFormat.Resthopper;
+        SchemaDataFormat dataFormat = SchemaDataFormat.Resthopper;
 
         public static RemoteDefinition Create(string path, HopsComponent parentComponent)
         {
@@ -85,33 +115,87 @@ namespace Hops
             }
             if (IsGrasshopperDefinition(filename))
             {
-                rc._filename = filename;
+                rc.filename = filename;
             }
             return rc;
         }
 
+        // Refuse to read excessively large local files into memory. Hops has historically
+        // hit raw File.ReadAllBytes on user-supplied paths, which crashes the entire Rhino
+        // process if the user accidentally points at a non-Grasshopper file (a multi-GB log,
+        // database dump, etc.). A real Grasshopper definition is well under the default cap;
+        // anything larger is almost certainly a misconfiguration. Surfaced cleanly so the
+        // caller can show a runtime error on the component instead of taking down Rhino.
+        //
+        // Override via the HOPS_MAX_LOCAL_FILE_SIZE environment variable (bytes). The value
+        // is read once on first access and cached for the lifetime of the process.
+        const string HOPS_MAX_LOCAL_FILE_SIZE = "HOPS_MAX_LOCAL_FILE_SIZE";
+        const long DefaultMaxLocalFileSize = 100L * 1024 * 1024; // 100 MB
+        static long? maxLocalFileSize;
+        static long MaxLocalFileSize
+        {
+            get
+            {
+                if (!maxLocalFileSize.HasValue)
+                {
+                    var raw = Environment.GetEnvironmentVariable(HOPS_MAX_LOCAL_FILE_SIZE);
+                    if (!string.IsNullOrWhiteSpace(raw) && long.TryParse(raw, out long parsed) && parsed > 0)
+                        maxLocalFileSize = parsed;
+                    else
+                        maxLocalFileSize = DefaultMaxLocalFileSize;
+                }
+                return maxLocalFileSize.Value;
+            }
+        }
+
+        static byte[] ReadLocalFileWithSizeCap(string path)
+        {
+            var info = new System.IO.FileInfo(path);
+            long cap = MaxLocalFileSize;
+            if (info.Length > cap)
+                throw new InvalidOperationException(
+                    $"File '{System.IO.Path.GetFileName(path)}' is {info.Length:N0} bytes — exceeds the {cap:N0}-byte cap on local definition files (override via the {HOPS_MAX_LOCAL_FILE_SIZE} environment variable).");
+            return System.IO.File.ReadAllBytes(path);
+        }
+
+        // Builds the debug envelope captured into HttpRecord.{IoRequest,SolveRequest}.
+        // Using a JObject (Newtonsoft is already a dependency) instead of hand-rolled string
+        // concat gives a consistent shape across all sites and proper JSON escaping for free.
+        // contentJson is embedded as a parsed JToken (not a string) so it nests cleanly.
+        static string BuildRequestEnvelope(string url, string method, string contentJson = null)
+        {
+            var obj = new Newtonsoft.Json.Linq.JObject
+            {
+                ["URL"] = url,
+                ["Method"] = method,
+            };
+            if (!string.IsNullOrEmpty(contentJson))
+                obj["Content"] = Newtonsoft.Json.Linq.JToken.Parse(contentJson);
+            return obj.ToString();
+        }
+
         public void InternalizeDefinition(string path)
         {
-            _internalizedDefinition = System.IO.File.ReadAllBytes(path);
-            _pathType = PathType.InternalizedDefinition;
+            internalizedDefinition = ReadLocalFileWithSizeCap(path);
+            pathType = PathType.InternalizedDefinition;
             RemoteDefinitionCache.Remove(this);
-            _path = null;
+            this.path = null;
         }
 
         private RemoteDefinition(string path, HopsComponent parentComponent)
         {
-            _parentComponent = parentComponent;
-            _path = path;
-            _internalizedDefinition = null;
+            this.parentComponent = parentComponent;
+            this.path = path;
+            internalizedDefinition = null;
         }
 
         public void Dispose()
         {
-            _parentComponent = null;
+            parentComponent = null;
             RemoteDefinitionCache.Remove(this);
         }
 
-        public bool IsNotResponingUrl()
+        public bool IsNotRespondingUrl()
         {
             var pathtype = GetPathType();
             return pathtype == PathType.NonresponsiveUrl;
@@ -125,16 +209,16 @@ namespace Hops
 
         public void ResetPathType()
         {
-            _pathType = null;
+            pathType = null;
         }
 
         PathType GetPathType()
         {
-            if (!_pathType.HasValue)
+            if (!pathType.HasValue)
             {
-                _pathType = GetPathType(_path);
+                pathType = GetPathType(path);
             }
-            return _pathType.Value;
+            return pathType.Value;
         }
 
         public static PathType GetPathType(string path)
@@ -147,11 +231,13 @@ namespace Hops
             {
                 try
                 {
-                    var getTask = HttpClient.GetAsync(path);
-                    var response = getTask.Result;
-                    string mediaType = response.Content.Headers.ContentType.MediaType.ToLowerInvariant();
-                    if (mediaType.Contains("json"))
-                        rc = PathType.Server;
+                    using (var cts = CreateTimeoutCts())
+                    {
+                        var response = HttpClient.GetAsync(path, cts.Token).Result;
+                        string mediaType = response.Content.Headers.ContentType.MediaType.ToLowerInvariant();
+                        if (mediaType.Contains("json"))
+                            rc = PathType.Server;
+                    }
                 }
                 catch (Exception)
                 {
@@ -161,43 +247,43 @@ namespace Hops
             return rc;
         }
 
-        public string Path { get { return _path; } set { _path = value; } }
-        public byte[] InternalizedDefinition { get { return _internalizedDefinition; } set { _internalizedDefinition = value; } }
+        public string Path { get { return path; } set { path = value; } }
+        public byte[] InternalizedDefinition { get { return internalizedDefinition; } set { internalizedDefinition = value; } }
 
         public void OnWatchedFileChanged()
         {
-            _cacheKey = null;
-            _description = null;
-            if (_parentComponent != null)
-                _parentComponent.OnRemoteDefinitionChanged();
+            cacheKey = null;
+            description = null;
+            if (parentComponent != null)
+                parentComponent.OnRemoteDefinitionChanged();
         }
 
         public Dictionary<string, Tuple<InputParamSchema, IGH_Param>> GetInputParams()
         {
-            if( _inputParams == null)
+            if( inputParams == null)
             {
                 GetRemoteDescription();
             }
-            return _inputParams;
+            return inputParams;
         }
 
         public Dictionary<string, IGH_Param> GetOutputParams()
         {
-            if (_outputParams == null)
+            if (outputParams == null)
             {
                 GetRemoteDescription();
             }
-            return _outputParams;
+            return outputParams;
         }
 
         public string GetDescription(out System.Drawing.Bitmap customIcon)
         {
-            if (_description == null)
+            if (description == null)
             {
                 GetRemoteDescription();
             }
-            customIcon = _customIcon;
-            return _description;
+            customIcon = this.customIcon;
+            return description;
         }
 
         public void GetRemoteDescription()
@@ -235,7 +321,11 @@ namespace Hops
 
             IoResponseSchema responseSchema = null;
             System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> responseTask;
-            IDisposable contentToDispose = null;
+            // Per-request disposables that need to outlive the if/else so the response can be
+            // awaited safely. Disposed in a single sweep at the end of the method.
+            System.Net.Http.StringContent contentToDispose = null;
+            System.Net.Http.HttpRequestMessage requestToDispose = null;
+            System.Threading.CancellationTokenSource ctsToDispose = null;
             if (performPost)
             {
                 string postUrl = Servers.GetDescriptionPostUrl();
@@ -250,93 +340,160 @@ namespace Hops
                     {
                         if (File.Exists(address))
                         {
-                            var bytes = System.IO.File.ReadAllBytes(address);
-                            schema.Algo = Convert.ToBase64String(bytes);
+                            try
+                            {
+                                var bytes = ReadLocalFileWithSizeCap(address);
+                                schema.Algo = Convert.ToBase64String(bytes);
+                            }
+                            catch (InvalidOperationException ex)
+                            {
+                                // Surface the size-cap failure on the component AND skip the
+                                // doomed POST — otherwise the server would just see an empty
+                                // Algo and return a generic deserialize error, masking the
+                                // real cause.
+                                HopsLog.Log.Error(ex.Message);
+                                var errSchema = new IoResponseSchema();
+                                errSchema.Errors.Add(ex.Message);
+                                parentComponent.HttpRecord.IoResponseSchema = errSchema;
+                                return;
+                            }
                         }
                         else
                         {
                             HopsLog.Log.Error($"File not found: {address}");
-                        }    
+                        }
                     }
                 }
                 else
                 {
-                    if(_internalizedDefinition != null)
-                        schema.Algo = Convert.ToBase64String(_internalizedDefinition);
+                    if(internalizedDefinition != null)
+                        schema.Algo = Convert.ToBase64String(internalizedDefinition);
                 }
                 schema.AbsoluteTolerance = GetDocumentTolerance();
                 schema.AngleTolerance = GetDocumentAngleTolerance();
                 schema.ModelUnits = GetDocumentUnits();
-                schema.FileName = _filename;
+                schema.FileName = filename;
                 string inputJson = JsonConvert.SerializeObject(schema);
-                string requestContent = "{";
-                requestContent += "\"URL\": \"" + postUrl + "\"," + Environment.NewLine;
-                requestContent += "\"Method\": \"POST" + "\"," + Environment.NewLine;
-                requestContent += "\"Content\": " + inputJson  + Environment.NewLine;
-                requestContent += "}";
-                _parentComponent.HTTPRecord.IORequest = requestContent;
+                parentComponent.HttpRecord.IoRequest = BuildRequestEnvelope(postUrl, "POST", inputJson);
                 var content = new System.Net.Http.StringContent(inputJson, Encoding.UTF8, "application/json");
-                HttpClient client = new HttpClient();
-                if(!String.IsNullOrEmpty(HopsAppSettings.APIKey))
-                    client.DefaultRequestHeaders.Add(_apiKeyName, HopsAppSettings.APIKey);
-                if(HopsAppSettings.HTTPTimeout > 0)
-                    client.Timeout = TimeSpan.FromSeconds(HopsAppSettings.HTTPTimeout);    
+                var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, postUrl) { Content = content };
+                AddApiKeyHeader(request);
+                var cts = CreateTimeoutCts();
                 var fileNameMsg = String.Empty;
-                if (!String.IsNullOrEmpty(_filename))
-                    fileNameMsg = $" with {_filename}";            
+                if (!String.IsNullOrEmpty(filename))
+                    fileNameMsg = $" with {filename}";
                 HopsLog.Log.Debug($"Sending POST request to {postUrl}{fileNameMsg}");
-                responseTask = client.PostAsync(postUrl, content);
-                _parentComponent.HTTPRecord.Schema = schema;
+                responseTask = HttpClient.SendAsync(request, cts.Token);
+                parentComponent.HttpRecord.Schema = schema;
                 contentToDispose = content;
+                requestToDispose = request;
+                ctsToDispose = cts;
             }
             else
             {
-                string requestContent = "{";
-                requestContent += "\"URL\": \"" + address + "\"," + Environment.NewLine;
-                requestContent += "\"Method\": \"GET" + "\"" + Environment.NewLine;
-                requestContent += "}";
-                _parentComponent.HTTPRecord.IORequest = requestContent;
-                responseTask = HttpClient.GetAsync(address);
+                parentComponent.HttpRecord.IoRequest = BuildRequestEnvelope(address, "GET");
+                var cts = CreateTimeoutCts();
+                responseTask = HttpClient.GetAsync(address, cts.Token);
+                ctsToDispose = cts;
             }
             if (responseTask != null)
             {
                 var sw = Stopwatch.StartNew();
-                var responseMessage = responseTask.Result;
-                HopsLog.Log.Debug($"Received response {responseMessage.StatusCode} in {sw.ElapsedMilliseconds}ms");
-                var remoteSolvedData = responseMessage.Content;
-                var stringResult = remoteSolvedData.ReadAsStringAsync().Result;
-                if (string.IsNullOrEmpty(stringResult))
+                try
                 {
-                    _pathType = PathType.InvalidUrl; // Looks like a valid but not related URL
-                    _parentComponent.HTTPRecord.IOResponse = "Invalid URL";
-                }
-                else
-                {
-                    _parentComponent.HTTPRecord.IOResponse = stringResult;
-                    responseSchema = JsonConvert.DeserializeObject<IoResponseSchema>(stringResult);
-                    _cacheKey = responseSchema.CacheKey;
-                    _filename = responseSchema.FileName;
-                    _parentComponent.HTTPRecord.IOResponseSchema = responseSchema;
-                    if(responseSchema.SupportedDataFormats != null && responseSchema.SupportedDataFormats.Count > 0)
+                    var responseMessage = responseTask.Result;
+                    HopsLog.Log.Debug($"Received response {responseMessage.StatusCode} in {sw.ElapsedMilliseconds}ms");
+                    var remoteSolvedData = responseMessage.Content;
+                    var stringResult = remoteSolvedData.ReadAsStringAsync().Result;
+                    parentComponent.HttpRecord.IoResponse = stringResult;
+
+                    // Detect 401 BEFORE attempting to parse the body as JSON. The middleware's
+                    // response body is plain text ("Api Key was not provided." / "Unauthorized
+                    // client."), which would throw JsonReaderException inside the deserializer
+                    // below. Surface via IoResponseSchema.Errors so DefineInputsAndOutputs picks
+                    // it up and displays a red runtime message on the Hops component.
+                    if (responseMessage.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
-                        _dataFormat = responseSchema.SupportedDataFormats?.Max() ?? SchemaDataFormat.Resthopper;
-                        if (_dataFormat > SchemaDataFormat.Grasshopper)
-                            _dataFormat = SchemaDataFormat.Grasshopper;
+                        var serverMessage = string.IsNullOrWhiteSpace(stringResult)
+                            ? "Server returned 401 Unauthorized — verify the RHINO_COMPUTE_KEY environment variable on the Hops client matches the server's configured key."
+                            : $"Server returned 401 Unauthorized: {stringResult.Trim()}";
+                        HopsLog.Log.Error(serverMessage);
+                        var errSchema = new IoResponseSchema();
+                        errSchema.Errors.Add(serverMessage);
+                        parentComponent.HttpRecord.IoResponseSchema = errSchema;
+                    }
+                    else if (!responseMessage.IsSuccessStatusCode)
+                    {
+                        // Any other non-success status (500/502/503/etc.) — e.g. the server's
+                        // global exception handler returned a JSON error body, or an upstream
+                        // URL fetch failed. Deserializing that body into an IoResponseSchema
+                        // yields null Inputs/Outputs and would NRE in the foreach loops below,
+                        // so surface it as a component error instead.
+                        var detail = ExtractServerErrorMessage(stringResult);
+                        var serverMessage = string.IsNullOrWhiteSpace(detail)
+                            ? $"Could not load the remote definition from {Path}\r\nThe server responded with {(int)responseMessage.StatusCode} ({responseMessage.StatusCode})."
+                            : $"Could not load the remote definition from {Path}\r\n{detail}";
+                        HopsLog.Log.Error(serverMessage);
+                        var errSchema = new IoResponseSchema();
+                        errSchema.Errors.Add(serverMessage);
+                        parentComponent.HttpRecord.IoResponseSchema = errSchema;
+                    }
+                    else if (string.IsNullOrEmpty(stringResult))
+                    {
+                        this.pathType = PathType.InvalidUrl; // Looks like a valid but not related URL
+                        parentComponent.HttpRecord.IoResponse = "Invalid URL";
                     }
                     else
                     {
-                        _dataFormat = SchemaDataFormat.Resthopper;
-                    }   
+                        responseSchema = JsonConvert.DeserializeObject<IoResponseSchema>(stringResult);
+                        cacheKey = responseSchema.CacheKey;
+                        filename = responseSchema.FileName;
+                        parentComponent.HttpRecord.IoResponseSchema = responseSchema;
+                        if(responseSchema.SupportedDataFormats != null && responseSchema.SupportedDataFormats.Count > 0)
+                        {
+                            dataFormat = responseSchema.SupportedDataFormats?.Max() ?? SchemaDataFormat.Resthopper;
+                            if (dataFormat > SchemaDataFormat.Grasshopper)
+                                dataFormat = SchemaDataFormat.Grasshopper;
+                        }
+                        else
+                        {
+                            dataFormat = SchemaDataFormat.Resthopper;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Surface cancellation (HttpTimeout exceeded) or network failure as a clear
+                    // runtime message on the component instead of bubbling up to Grasshopper
+                    // where the exception is swallowed silently. .Result wraps the underlying
+                    // failure in AggregateException; unwrap one level so the message is clean.
+                    var inner = ex is AggregateException ae && ae.InnerException != null
+                        ? ae.InnerException
+                        : ex;
+                    string serverMessage;
+                    if (inner is OperationCanceledException)
+                    {
+                        serverMessage = $"Could not load the remote definition from {Path}\r\nRequest timed out after {sw.Elapsed.TotalSeconds:0.0}s (configured timeout: {HopsAppSettings.HttpTimeout}s — raise it in the Hops settings panel if the server is just slow).";
+                    }
+                    else
+                    {
+                        serverMessage = $"Could not load the remote definition from {Path}\r\n{inner.Message}";
+                    }
+                    HopsLog.Log.Error(serverMessage);
+                    var errSchema = new IoResponseSchema();
+                    errSchema.Errors.Add(serverMessage);
+                    parentComponent.HttpRecord.IoResponseSchema = errSchema;
                 }
             }
 
-            if (contentToDispose != null)
-                contentToDispose.Dispose();
+            contentToDispose?.Dispose();
+            requestToDispose?.Dispose();
+            ctsToDispose?.Dispose();
 
             if (responseSchema != null)
             { 
-                _description = responseSchema.Description;
-                _customIcon = null;
+                description = responseSchema.Description;
+                customIcon = null;
                 if (!string.IsNullOrWhiteSpace(responseSchema.Icon))
                 {
                     try
@@ -353,21 +510,21 @@ namespace Hops
                             var method = typeof(Rhino.UI.DrawingUtilities).GetMethod("BitmapFromSvg", new[] {typeof(string), typeof(int), typeof(int)} );
                             if (method != null)
                             {
-                                _customIcon = method.Invoke(null, new object[] { svg, 24, 24 }) as System.Drawing.Bitmap;
+                                customIcon = method.Invoke(null, new object[] { svg, 24, 24 }) as System.Drawing.Bitmap;
                             }
-                            //_customIcon = Rhino.UI.DrawingUtilities.BitmapFromSvg(responseSchema.Icon, 24, 24);
+                            //customIcon = Rhino.UI.DrawingUtilities.BitmapFromSvg(responseSchema.Icon, 24, 24);
                         }
-                        if (_customIcon == null)
+                        if (customIcon == null)
                         {
                             byte[] bytes = Convert.FromBase64String(responseSchema.Icon);
                             using (var ms = new MemoryStream(bytes))
                             {
-                                _customIcon = new System.Drawing.Bitmap(ms);
-                                if (_customIcon != null && (_customIcon.Width != 24 || _customIcon.Height != 24))
+                                customIcon = new System.Drawing.Bitmap(ms);
+                                if (customIcon != null && (customIcon.Width != 24 || customIcon.Height != 24))
                                 {
                                     // Make sure the custom icon is 24x24 which is what GH expects.
-                                    var temp = _customIcon;
-                                    _customIcon = new System.Drawing.Bitmap(temp, new System.Drawing.Size(24, 24));
+                                    var temp = customIcon;
+                                    customIcon = new System.Drawing.Bitmap(temp, new System.Drawing.Size(24, 24));
                                     temp.Dispose();
                                 }
                             }
@@ -388,9 +545,11 @@ namespace Hops
                 if (!String.IsNullOrEmpty(responseSchema.FileName))
                     fileNameMsg = $" in {responseSchema.FileName}";
                 HopsLog.Log.Debug($"Compute.Geometry found {responseSchema.InputNames.Count} input{inputSuffix} and {responseSchema.OutputNames.Count} output{outputSuffix}{fileNameMsg}");
-                _inputParams = new Dictionary<string, Tuple<InputParamSchema, IGH_Param>>();
-                _outputParams = new Dictionary<string, IGH_Param>();
-                foreach (var input in responseSchema.Inputs)
+                inputParams = new Dictionary<string, Tuple<InputParamSchema, IGH_Param>>();
+                outputParams = new Dictionary<string, IGH_Param>();
+                // Defensive: a well-formed /io success response always populates these, but
+                // guard against null so a partial/unexpected body can't NullReference here.
+                foreach (var input in responseSchema.Inputs ?? Enumerable.Empty<InputParamSchema>())
                 {
                     string inputParamName = input.Name;
                     if (inputParamName.StartsWith("RH_IN:"))
@@ -398,9 +557,9 @@ namespace Hops
                         var chunks = inputParamName.Split(new char[] { ':' });
                         inputParamName = chunks[chunks.Length - 1];
                     }
-                    _inputParams[inputParamName] = Tuple.Create(input, ParamFromIoResponseSchema(input));
+                    inputParams[inputParamName] = Tuple.Create(input, ParamFromIoResponseSchema(input));
                 }
-                foreach (var output in responseSchema.Outputs)
+                foreach (var output in responseSchema.Outputs ?? Enumerable.Empty<IoParamSchema>())
                 {
                     string outputParamName = output.Name;
                     if (outputParamName.StartsWith("RH_OUT:"))
@@ -408,9 +567,9 @@ namespace Hops
                         var chunks = outputParamName.Split(new char[] { ':' });
                         outputParamName = chunks[chunks.Length - 1];
                     }
-                    _outputParams[outputParamName] = ParamFromIoResponseSchema(output);
+                    outputParams[outputParamName] = ParamFromIoResponseSchema(output);
                 }
-                _parentComponent.HTTPRecord.IOResponseSchema = responseSchema;
+                parentComponent.HttpRecord.IoResponseSchema = responseSchema;
             }
         }
 
@@ -471,18 +630,42 @@ namespace Hops
             }
         }
 
-        static System.Net.Http.HttpClient _httpClient = null;
+        static System.Net.Http.HttpClient httpClient = null;
         public static System.Net.Http.HttpClient HttpClient
         {
             get
             {
-                if (_httpClient==null)
+                if (httpClient == null)
                 {
-                    _httpClient = new System.Net.Http.HttpClient();
+                    // One shared HttpClient for all requests (avoids per-request socket allocation).
+                    // Timeout is intentionally infinite — per-request CancellationTokenSource
+                    // controls actual deadlines so HopsAppSettings.HttpTimeout values larger than
+                    // 100s aren't capped by HttpClient's default.
+                    httpClient = new System.Net.Http.HttpClient
+                    {
+                        Timeout = System.Threading.Timeout.InfiniteTimeSpan
+                    };
                 }
-                return _httpClient;
+                return httpClient;
             }
         }
+
+        // Per-request timeout via CancellationTokenSource. Uses HopsAppSettings.HttpTimeout
+        // if configured, otherwise falls back to 100 seconds (HttpClient's historical default).
+        static System.Threading.CancellationTokenSource CreateTimeoutCts()
+        {
+            int seconds = HopsAppSettings.HttpTimeout > 0 ? HopsAppSettings.HttpTimeout : 100;
+            return new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(seconds));
+        }
+
+        // Adds the RhinoComputeKey header to the per-request HttpRequestMessage when an API
+        // key is configured. Headers must go on the request, not the shared HttpClient.
+        static void AddApiKeyHeader(System.Net.Http.HttpRequestMessage request)
+        {
+            if (!string.IsNullOrEmpty(HopsAppSettings.APIKey))
+                request.Headers.Add(API_KEY_NAME, HopsAppSettings.APIKey);
+        }
+
         static Schema SafeSchemaDeserialize(string data)
         {
             try
@@ -504,17 +687,16 @@ namespace Hops
             if (pathType == PathType.GrasshopperDefinition || pathType == PathType.ComponentGuid || pathType == PathType.InternalizedDefinition)
             {
                 solveUrl = Servers.GetSolveUrl();
-                if (!string.IsNullOrEmpty(_cacheKey))
-                    inputSchema.Pointer = _cacheKey;
+                if (!string.IsNullOrEmpty(cacheKey))
+                    inputSchema.Pointer = cacheKey;
             }
             else
             {
-                int index = Path.LastIndexOf('/');
-                var authority = new Uri(Path).Authority;
-                solveUrl = "http://" + authority + "/solve";
+                var uri = new Uri(Path);
+                solveUrl = $"{uri.Scheme}://{uri.Authority}/solve";
             }
 
-            if (!string.IsNullOrEmpty(_filename)) inputSchema.FileName = _filename;
+            if (!string.IsNullOrEmpty(filename)) inputSchema.FileName = filename;
             string inputJson = JsonConvert.SerializeObject(inputSchema);
             if (useMemoryCache && inputSchema.Algo == null)
             {
@@ -524,52 +706,59 @@ namespace Hops
                     return cachedResults;
                 }
             }
-            string requestContent = "{";
-            requestContent += "\"URL\": \"" + solveUrl + "\"," + Environment.NewLine;
-            requestContent += "\"content\": " + inputJson + Environment.NewLine;
-            requestContent += "}";
-            _parentComponent.HTTPRecord.SolveRequest = requestContent;
+            string requestContent = BuildRequestEnvelope(solveUrl, "POST", inputJson);
+            parentComponent.HttpRecord.SolveRequest = requestContent;
             using (var content = new System.Net.Http.StringContent(inputJson, Encoding.UTF8, "application/json"))
+            using (var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, solveUrl) { Content = content })
+            using (var cts = CreateTimeoutCts())
             {
-                HttpClient client = new HttpClient();
-                if (!String.IsNullOrEmpty(HopsAppSettings.APIKey))
-                    client.DefaultRequestHeaders.Add(_apiKeyName, HopsAppSettings.APIKey);
-                if (HopsAppSettings.HTTPTimeout > 0)
-                    client.Timeout = TimeSpan.FromSeconds(HopsAppSettings.HTTPTimeout);
-                var postTask = client.PostAsync(solveUrl, content);
+                AddApiKeyHeader(request);
+                var postTask = HttpClient.SendAsync(request, cts.Token);
                 var fileNameMsg = String.Empty;
                 if (!String.IsNullOrEmpty(inputSchema.FileName))
-                    fileNameMsg = $" with {inputSchema.FileName} input values";                
+                    fileNameMsg = $" with {inputSchema.FileName} input values";
                 HopsLog.Log.Debug($"Sending POST request to {solveUrl}{fileNameMsg}");
                 var sw = Stopwatch.StartNew();
                 var responseMessage = postTask.Result;
                 HopsLog.Log.Debug($"Received response {responseMessage.StatusCode} in {sw.ElapsedMilliseconds}ms");
                 var remoteSolvedData = responseMessage.Content;
                 var stringResult = remoteSolvedData.ReadAsStringAsync().Result;
-                _parentComponent.HTTPRecord.SolveResponse = stringResult;
+                parentComponent.HttpRecord.SolveResponse = stringResult;
                 Schema schema = SafeSchemaDeserialize(stringResult);
                 if (schema == null && responseMessage.StatusCode == System.Net.HttpStatusCode.InternalServerError)
                 {
                     bool fileExists = File.Exists(Path);
                     if (fileExists && string.IsNullOrEmpty(inputSchema.Algo))
                     {
-                        var bytes = System.IO.File.ReadAllBytes(Path);
+                        // Surface this via schema.Warnings rather than AddRuntimeMessage directly.
+                        // SetComponentOutputs reads schema.Warnings on the UI thread during the
+                        // results-application solve cycle, so it survives the async-mode clear
+                        // that BeforeSolveInstance does at the start of that cycle.
+                        string autoUploadMessage = $"Server returned HTTP 500. Uploaded local file '{System.IO.Path.GetFileName(Path)}' to {solveUrl} as a fallback.";
+                        byte[] bytes;
+                        try
+                        {
+                            bytes = ReadLocalFileWithSizeCap(Path);
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            var badSchema = new Schema();
+                            HopsLog.Log.Error(ex.Message);
+                            badSchema.Errors.Add(ex.Message);
+                            parentComponent.HttpRecord.Schema = badSchema;
+                            return badSchema;
+                        }
                         string base64 = Convert.ToBase64String(bytes);
                         inputSchema.Algo = base64;
                         inputSchema.FileName = System.IO.Path.GetFileName(Path);
                         inputJson = JsonConvert.SerializeObject(inputSchema);
-                        requestContent = "{";
-                        requestContent += "\"URL\": \"" + solveUrl + "\"," + Environment.NewLine;
-                        requestContent += "\"content\":" + inputJson + Environment.NewLine;
-                        requestContent += "}";
-                        _parentComponent.HTTPRecord.SolveRequest = requestContent;
-                        var content2 = new System.Net.Http.StringContent(inputJson, Encoding.UTF8, "application/json");
-                        HttpClient client2 = new HttpClient();
-                        if (!String.IsNullOrEmpty(HopsAppSettings.APIKey))
-                            client2.DefaultRequestHeaders.Add(_apiKeyName, HopsAppSettings.APIKey);
-                        if (HopsAppSettings.HTTPTimeout > 0)
-                            client2.Timeout = TimeSpan.FromSeconds(HopsAppSettings.HTTPTimeout);
-                        postTask = client.PostAsync(solveUrl, content2);
+                        requestContent = BuildRequestEnvelope(solveUrl, "POST", inputJson);
+                        parentComponent.HttpRecord.SolveRequest = requestContent;
+                        using var content2 = new System.Net.Http.StringContent(inputJson, Encoding.UTF8, "application/json");
+                        using var request2 = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, solveUrl) { Content = content2 };
+                        using var cts2 = CreateTimeoutCts();
+                        AddApiKeyHeader(request2);
+                        postTask = HttpClient.SendAsync(request2, cts2.Token);
                         var fileNameMsg2 = String.Empty;
                         if (!String.IsNullOrEmpty(inputSchema.FileName))
                             fileNameMsg2 = $" with {inputSchema.FileName} input values";
@@ -579,7 +768,7 @@ namespace Hops
                         HopsLog.Log.Debug($"Received response {responseMessage.StatusCode} in {sw2.ElapsedMilliseconds}ms");
                         remoteSolvedData = responseMessage.Content;
                         stringResult = remoteSolvedData.ReadAsStringAsync().Result;
-                        _parentComponent.HTTPRecord.SolveResponse = stringResult;
+                        parentComponent.HttpRecord.SolveResponse = stringResult;
                         schema = SafeSchemaDeserialize(stringResult);
                         if (schema == null && responseMessage.StatusCode == System.Net.HttpStatusCode.InternalServerError)
                         {
@@ -587,9 +776,12 @@ namespace Hops
                             var errorMsg = "Unable to solve on compute";
                             HopsLog.Log.Error(errorMsg);
                             badSchema.Errors.Add(errorMsg);
-                            _parentComponent.HTTPRecord.Schema = badSchema;
+                            badSchema.Warnings.Add(autoUploadMessage);
+                            parentComponent.HttpRecord.Schema = badSchema;
                             return badSchema;
                         }
+                        if (schema != null)
+                            schema.Warnings.Add(autoUploadMessage);
                     }
                     else
                     {
@@ -599,7 +791,7 @@ namespace Hops
                             var errorMsg = $"Unable to find file: {Path}";
                             HopsLog.Log.Error(errorMsg);
                             badSchema.Errors.Add(errorMsg);
-                            _parentComponent.HTTPRecord.Schema = badSchema;
+                            parentComponent.HttpRecord.Schema = badSchema;
                             return badSchema;
                         }
                     }
@@ -611,7 +803,26 @@ namespace Hops
                     var errorMsg = $"Request timeout: {Path}";
                     HopsLog.Log.Error(errorMsg);
                     badSchema.Errors.Add(errorMsg);
-                    _parentComponent.HTTPRecord.Schema = badSchema;
+                    parentComponent.HttpRecord.Schema = badSchema;
+                    return badSchema;
+                }
+
+                // Authentication failure. The same 401 can come from either rhino.compute's
+                // ApiKeyMiddleware (when rhino.compute is the front-door) or compute.geometry's
+                // ApiKeyMiddleware (when targeted directly), so we don't need to distinguish.
+                // Surface it as a component error so the user sees it in Grasshopper rather
+                // than getting a silent solve failure.
+                if (responseMessage.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    var badSchema = new Schema();
+                    // Use the server's response body when available — it explains whether the
+                    // header was missing or the key was wrong. Fall back to a generic message.
+                    var serverMessage = string.IsNullOrWhiteSpace(stringResult)
+                        ? "Server returned 401 Unauthorized — verify the RHINO_COMPUTE_KEY environment variable on the Hops client matches the server's configured key."
+                        : $"Server returned 401 Unauthorized: {stringResult.Trim()}";
+                    HopsLog.Log.Error(serverMessage);
+                    badSchema.Errors.Add(serverMessage);
+                    parentComponent.HttpRecord.Schema = badSchema;
                     return badSchema;
                 }
 
@@ -620,14 +831,14 @@ namespace Hops
                     && string.Equals(schema.Errors[0], "Bad inputs", StringComparison.OrdinalIgnoreCase));
                 if (!rebuildDefinition)
                 {
-                    if (schema.Values.Count > 0 && schema.Values.Count != _outputParams.Count)
+                    if (schema.Values.Count > 0 && schema.Values.Count != outputParams.Count)
                         rebuildDefinition = true;
                 }
 
                 if (rebuildDefinition)
                 {
                     GetRemoteDescription();
-                    _parentComponent.OnRemoteDefinitionChanged();
+                    parentComponent.OnRemoteDefinitionChanged();
                 }
                 else
                 {
@@ -639,14 +850,14 @@ namespace Hops
                         }
                     }
                 }
-                _cacheKey = schema.Pointer;
+                cacheKey = schema.Pointer;
                 return schema;
             }
         }
 
         public void SetComponentOutputs(Schema schema, IGH_DataAccess DA, List<IGH_Param> outputParams, HopsComponent component)
         {
-            if(_dataFormat == SchemaDataFormat.Grasshopper)
+            if(dataFormat == SchemaDataFormat.Grasshopper)
             {
                 foreach (var param in schema.GrasshopperValues.Values)
                 {
@@ -668,7 +879,7 @@ namespace Hops
                     DA.SetDataTree(paramIndex, param.Value);
                 }
             }
-            else if (_dataFormat == SchemaDataFormat.Resthopper)
+            else if (dataFormat == SchemaDataFormat.Resthopper)
             {
                 if (schema.Values.Count > 0)
                 {
@@ -757,93 +968,70 @@ namespace Hops
             }
         }
 
+        // Decode a JSON-encoded string from the wire (the form produced by JsonConvert.SerializeObject
+        // for any non-geometry type — surrounded by quote chars with escape sequences for backslashes,
+        // embedded quotes, etc.). The primary path uses JsonConvert.DeserializeObject<string> which
+        // correctly reverses JSON escapes — so a file path like "C:\\Users\\file.txt" on the wire
+        // comes back as "C:\Users\file.txt". Falls back to the legacy embedded-JSON-object handling
+        // for malformed input that isn't a valid JSON string literal.
+        static string DecodeJsonString(string objData)
+        {
+            try
+            {
+                return JsonConvert.DeserializeObject<string>(objData);
+            }
+            catch (Exception)
+            {
+                return MaybeUnescapeJsonString(objData.Trim('"'));
+            }
+        }
+
+        // Legacy fallback for malformed wire payloads that contain an embedded JSON object
+        // as a string (e.g. "{\"key\":\"value\"}" with literal backslash-quote pairs that
+        // a strict JSON string decoder would reject). Preserves the prior heuristic exactly.
+        static string MaybeUnescapeJsonString(string data)
+        {
+            if (data.Trim().StartsWith("{") && data.Contains("\\"))
+                return System.Text.RegularExpressions.Regex.Unescape(data);
+            return data;
+        }
+
         static IGH_Goo GooFromResthopperObject(ResthopperObject obj)
         {
             if (obj.ResolvedData != null)
-                return obj.ResolvedData as Grasshopper.Kernel.Types.IGH_Goo;
-            
+                return obj.ResolvedData as IGH_Goo;
+
             string data = obj.Data.Trim('"');
+
+            // Simple types: parse or JSON-deserialize and wrap. Each entry is cached on
+            // obj.ResolvedData so subsequent calls skip the work.
+            IGH_Goo simpleResult = obj.Type switch
+            {
+                "System.Boolean"             => new GH_Boolean(bool.Parse(data)),
+                "System.Double"              => new GH_Number(double.Parse(data)),
+                "System.String"              => new GH_String(DecodeJsonString(obj.Data)),
+                "System.Int32"               => new GH_Integer(int.Parse(data)),
+                "Rhino.Geometry.Circle"      => new GH_Circle(JsonConvert.DeserializeObject<Circle>(data)),
+                "Rhino.Geometry.Arc"         => new GH_Arc(JsonConvert.DeserializeObject<Arc>(data)),
+                "Rhino.Geometry.Line"        => new GH_Line(JsonConvert.DeserializeObject<Line>(data)),
+                "Rhino.Geometry.Rectangle3d" => new GH_Rectangle(JsonConvert.DeserializeObject<Rectangle3d>(data)),
+                "Rhino.Geometry.Plane"       => new GH_Plane(JsonConvert.DeserializeObject<Plane>(data)),
+                "Rhino.Geometry.Point3d"     => new GH_Point(JsonConvert.DeserializeObject<Point3d>(data)),
+                "Rhino.Geometry.Vector3d"    => new GH_Vector(JsonConvert.DeserializeObject<Vector3d>(data)),
+                "Rhino.Geometry.Box"         => new GH_Box(JsonConvert.DeserializeObject<Box>(data)),
+                _                            => null
+            };
+            if (simpleResult != null)
+            {
+                obj.ResolvedData = simpleResult;
+                return simpleResult;
+            }
+
+            // CommonObject geometry types: deserialize as dictionary, rehydrate via FromJSON,
+            // wrap based on runtime type. Original did not cache these on obj.ResolvedData
+            // (preserved).
             switch (obj.Type)
             {
-                case "System.Boolean":
-                    {
-                        var boolResult = new Grasshopper.Kernel.Types.GH_Boolean(bool.Parse(data));
-                        obj.ResolvedData = boolResult;
-                        return boolResult;
-                    }
-                case "System.Double":
-                    {
-                        var doubleResult = new Grasshopper.Kernel.Types.GH_Number(double.Parse(data));
-                        obj.ResolvedData = doubleResult;
-                        return doubleResult;
-                    }
-                case "System.String":
-                    {
-                        string unescaped = data;
-                        // TODO: This is a a hack. I understand that JSON needs to escape
-                        // embedded JSON, but I'm not particularly happy with the following code
-                        if (unescaped.Trim().StartsWith("{") && unescaped.Contains("\\"))
-                        {
-                            unescaped = System.Text.RegularExpressions.Regex.Unescape(data);
-                        }
-                        var stringResult = new Grasshopper.Kernel.Types.GH_String(unescaped);
-                        obj.ResolvedData = stringResult;
-                        return stringResult;
-                    }
-                case "System.Int32":
-                    {
-                        var intResult = new Grasshopper.Kernel.Types.GH_Integer(int.Parse(data));
-                        obj.ResolvedData = intResult;
-                        return intResult;
-                    }
-                case "Rhino.Geometry.Circle":
-                    {
-                        var circleResult = new Grasshopper.Kernel.Types.GH_Circle(JsonConvert.DeserializeObject<Circle>(data));
-                        obj.ResolvedData = circleResult;
-                        return circleResult;
-                    }
-                case "Rhino.Geometry.Arc":
-                    {
-                        var arcResult = new Grasshopper.Kernel.Types.GH_Arc(JsonConvert.DeserializeObject<Arc>(data));
-                        obj.ResolvedData = arcResult;
-                        return arcResult;
-                    }
-                case "Rhino.Geometry.Line":
-                    {
-                        var lineResult = new Grasshopper.Kernel.Types.GH_Line(JsonConvert.DeserializeObject<Line>(data));
-                        obj.ResolvedData = lineResult;
-                        return lineResult;
-                    }
-                case "Rhino.Geometry.Rectangle3d":
-                    {
-                        var rectangleResult = new Grasshopper.Kernel.Types.GH_Rectangle(JsonConvert.DeserializeObject<Rectangle3d>(data));
-                        obj.ResolvedData = rectangleResult;
-                        return rectangleResult;
-                    }
-                case "Rhino.Geometry.Plane":
-                    {
-                        var planeResult = new Grasshopper.Kernel.Types.GH_Plane(JsonConvert.DeserializeObject<Plane>(data));
-                        obj.ResolvedData = planeResult;
-                        return planeResult;
-                    }
-                case "Rhino.Geometry.Point3d":
-                    {
-                        var pointResult = new Grasshopper.Kernel.Types.GH_Point(JsonConvert.DeserializeObject<Point3d>(data));
-                        obj.ResolvedData = pointResult;
-                        return pointResult;
-                    }
-                case "Rhino.Geometry.Vector3d":
-                    {
-                        var vectorResult = new Grasshopper.Kernel.Types.GH_Vector(JsonConvert.DeserializeObject<Vector3d>(data));
-                        obj.ResolvedData = vectorResult;
-                        return vectorResult;
-                    }
-                case "Rhino.Geometry.Box":
-                    {
-                        var boxResult = new Grasshopper.Kernel.Types.GH_Box(JsonConvert.DeserializeObject<Box>(data));
-                        obj.ResolvedData = boxResult;
-                        return boxResult;
-                    }
                 case "Rhino.Geometry.Brep":
                 case "Rhino.Geometry.Curve":
                 case "Rhino.Geometry.Extrusion":
@@ -862,54 +1050,15 @@ namespace Hops
                 case "Rhino.Geometry.TextEntity":
                 case "Rhino.Geometry.TextDot":
                 case "Rhino.Geometry.Leader":
-                    {
-                        Dictionary<string, string> dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(data);
-                        var geometry = Rhino.Runtime.CommonObject.FromJSON(dict);
-                        if (geometry is Extrusion)
-                            return new Grasshopper.Kernel.Types.GH_Extrusion(geometry as Extrusion);
-                        if (geometry is Surface)
-                            return new Grasshopper.Kernel.Types.GH_Surface(geometry as Surface);
-                        if (geometry is Brep brep)
-                        {
-                           if(brep.Faces.Count > 1)
-                           {
-                                return new Grasshopper.Kernel.Types.GH_Brep(brep);
-                           }
-                           else
-                           {
-                                return new Grasshopper.Kernel.Types.GH_Surface(brep);
-                           }
-                        }   
-                        if (geometry is Curve)
-                            return new Grasshopper.Kernel.Types.GH_Curve(geometry as Curve);
-                        if (geometry is Mesh)
-                            return new Grasshopper.Kernel.Types.GH_Mesh(geometry as Mesh);
-                        if (geometry is SubD)
-                            return new Grasshopper.Kernel.Types.GH_SubD(geometry as SubD);
-                        if (geometry is PointCloud)
-                            return new Grasshopper.Kernel.Types.GH_PointCloud(geometry as PointCloud);
-                        if (geometry is InstanceReferenceGeometry)
-                            return new Grasshopper.Kernel.Types.GH_InstanceReference(geometry as InstanceReferenceGeometry);
-                        if (geometry is Hatch)
-                            return new Grasshopper.Kernel.Types.GH_Hatch(geometry as Hatch);
-                        if (geometry is LinearDimension)
-                            return new Grasshopper.Kernel.Types.GH_LinearDimension(geometry as LinearDimension);
-                        if (geometry is AngularDimension)
-                            return new Grasshopper.Kernel.Types.GH_AngularDimension(geometry as AngularDimension);
-                        if (geometry is RadialDimension)
-                            return new Grasshopper.Kernel.Types.GH_RadialDimension(geometry as RadialDimension);
-                        if (geometry is OrdinateDimension)
-                            return new Grasshopper.Kernel.Types.GH_OrdinateDimension(geometry as OrdinateDimension);
-                        if (geometry is TextEntity)
-                            return new Grasshopper.Kernel.Types.GH_TextEntity(geometry as TextEntity);
-                        if (geometry is TextDot)
-                            return new Grasshopper.Kernel.Types.GH_TextDot(geometry as TextDot);
-                        if (geometry is Leader)
-                            return new Grasshopper.Kernel.Types.GH_Leader(geometry as Leader);
-                    }
+                    var explicitResult = DeserializeExplicitGeometry(data);
+                    if (explicitResult != null)
+                        return explicitResult;
                     break;
             }
 
+            // Fallback for any Rhino.Geometry.* type not handled above: dynamic type resolution
+            // via the assembly that owns Point3d. Surface gets converted to Brep here (different
+            // from the explicit case above, which keeps it as GH_Surface) — preserved verbatim.
             if (obj.Type.StartsWith("Rhino.Geometry"))
             {
                 var pt = new Rhino.Geometry.Point3d();
@@ -920,70 +1069,101 @@ namespace Hops
                 System.Type type = System.Type.GetType(sType);
                 if (type != null && typeof(GeometryBase).IsAssignableFrom(type))
                 {
-                    Dictionary<string, string> dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(data);
+                    var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(data);
                     var geometry = Rhino.Runtime.CommonObject.FromJSON(dict);
-                    Surface surface = geometry as Surface;
-                    if (surface != null)
+                    if (geometry is Surface surface)
                         geometry = surface.ToBrep();
-                    if (geometry is Brep)
-                        return new Grasshopper.Kernel.Types.GH_Brep(geometry as Brep);
-                    if (geometry is Curve)
-                        return new Grasshopper.Kernel.Types.GH_Curve(geometry as Curve);
-                    if (geometry is Mesh)
-                        return new Grasshopper.Kernel.Types.GH_Mesh(geometry as Mesh);
-                    if (geometry is SubD)
-                        return new Grasshopper.Kernel.Types.GH_SubD(geometry as SubD);
+                    IGH_Goo fallbackResult = geometry switch
+                    {
+                        Brep brep   => new GH_Brep(brep),
+                        Curve curve => new GH_Curve(curve),
+                        Mesh mesh   => new GH_Mesh(mesh),
+                        SubD subD   => new GH_SubD(subD),
+                        _           => null
+                    };
+                    if (fallbackResult != null)
+                        return fallbackResult;
                 }
             }
 
             throw new Exception("Unable to convert resthopper data");
         }
 
-        static List<IGH_Param> _params;
+        // CommonObject geometry deserializer for the explicit-type cases in GooFromResthopperObject.
+        // Order matters: Extrusion : Surface, so Extrusion must come first. A multi-face Brep
+        // wraps as GH_Brep; a single-face Brep wraps as GH_Surface (preserved from original).
+        static IGH_Goo DeserializeExplicitGeometry(string data)
+        {
+            var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(data);
+            var geometry = Rhino.Runtime.CommonObject.FromJSON(dict);
+            return geometry switch
+            {
+                Extrusion ext                       => new GH_Extrusion(ext),
+                Surface surface                     => new GH_Surface(surface),
+                Brep brep when brep.Faces.Count > 1 => new GH_Brep(brep),
+                Brep brep                           => new GH_Surface(brep),
+                Curve curve                         => new GH_Curve(curve),
+                Mesh mesh                           => new GH_Mesh(mesh),
+                SubD subD                           => new GH_SubD(subD),
+                PointCloud pc                       => new GH_PointCloud(pc),
+                InstanceReferenceGeometry iref      => new GH_InstanceReference(iref),
+                Hatch hatch                         => new GH_Hatch(hatch),
+                LinearDimension lin                 => new GH_LinearDimension(lin),
+                AngularDimension ang                => new GH_AngularDimension(ang),
+                RadialDimension rad                 => new GH_RadialDimension(rad),
+                OrdinateDimension ord               => new GH_OrdinateDimension(ord),
+                TextEntity text                     => new GH_TextEntity(text),
+                TextDot textDot                     => new GH_TextDot(textDot),
+                Leader leader                       => new GH_Leader(leader),
+                _                                   => null
+            };
+        }
+
+        static List<IGH_Param> parameters;
         static IGH_Param ParamFromIoResponseSchema(IoParamSchema item)
         {
-            if (_params == null)
+            if (parameters == null)
             {
-                _params = new List<IGH_Param>();
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Arc());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Boolean());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Box());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Brep());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Circle());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Colour());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Complex());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Culture());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Curve());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Field());
+                parameters = new List<IGH_Param>();
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Arc());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Boolean());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Box());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Brep());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Circle());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Colour());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Complex());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Culture());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Curve());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Field());
                 //FilePath has the same ParamType as String
-                //_params.Add(new Grasshopper.Kernel.Parameters.Param_FilePath());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_GenericObject());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Geometry());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Group());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Guid());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Integer());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Interval());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Interval2D());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_LatLonLocation());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Line());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Matrix());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Mesh());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_MeshFace());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_MeshParameters());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Number());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Plane());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Point());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Rectangle());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_String());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_StructurePath());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_SubD());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Surface());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Time());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Transform());
-                _params.Add(new Grasshopper.Kernel.Parameters.Param_Vector());
-                _params.Add(new Grasshopper.Rhinoceros.Model.Params.Param_ModelObject());
+                //parameters.Add(new Grasshopper.Kernel.Parameters.Param_FilePath());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_GenericObject());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Geometry());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Group());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Guid());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Integer());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Interval());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Interval2D());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_LatLonLocation());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Line());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Matrix());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Mesh());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_MeshFace());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_MeshParameters());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Number());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Plane());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Point());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Rectangle());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_String());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_StructurePath());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_SubD());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Surface());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Time());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Transform());
+                parameters.Add(new Grasshopper.Kernel.Parameters.Param_Vector());
+                parameters.Add(new Grasshopper.Rhinoceros.Model.Params.Param_ModelObject());
             }
-            foreach(var p in _params)
+            foreach(var p in parameters)
             {
                 if (p.TypeName.Equals(item.ParamType, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1060,12 +1240,20 @@ namespace Hops
         static string GetPathFromInputData(IGH_DataAccess DA, HopsComponent component, int paramIndex)
         {
             int pathIndex = 0;
-            if (component?.Params.Input[paramIndex].VolatileData?.PathCount > 1)
+            var volatileData = component?.Params.Input[paramIndex].VolatileData;
+            if (volatileData?.PathCount > 1)
                 pathIndex = DA.Iteration;
-            if (component?.Params.Input[paramIndex].VolatileData?.Paths.Count > 0)
-                return component?.Params.Input[paramIndex].VolatileData?.Paths?[pathIndex].ToString();
-            else
-                return null;
+            if (volatileData?.Paths.Count > 0)
+            {
+                // When two inputs have different path counts (e.g. Series of 5 vs Range of 10),
+                // DA.Iteration can exceed this input's path count once GH starts iterating the
+                // longer input. Clamp to the last valid index — matches Grasshopper's longest-list
+                // behavior, which DA.GetData already does for the value itself.
+                if (pathIndex >= volatileData.Paths.Count)
+                    pathIndex = volatileData.Paths.Count - 1;
+                return volatileData.Paths[pathIndex].ToString();
+            }
+            return null;
         }
 
         static GH_Path GetGHPathFromInputData(IGH_DataAccess DA, HopsComponent component, int paramIndex)
@@ -1083,7 +1271,6 @@ namespace Hops
             GH_ParamAccess access,
             ref int inputCount,
             Grasshopper.Kernel.Data.GH_Structure<IGH_Goo> dataTree,
-            ref List<string> warnings,
             ref List<string> errors)
         {
             GH_Path path = new GH_Path(0);
@@ -1135,9 +1322,7 @@ namespace Hops
             GH_ParamAccess access,
             ref int inputCount,
             DataTree<ResthopperObject> dataTree,
-            ref List<string> warnings,
-            ref List<string> errors,
-            bool convertToGeometryBase = false)
+            ref List<string> errors)
         {
             string path = "{0}";
             var paramIndex = component?.Params.IndexOfInputParam(inputName);
@@ -1150,21 +1335,13 @@ namespace Hops
                 if (DA.GetData(inputName, ref t))
                 {
                     inputCount = 1;
-                    if (convertToGeometryBase)
+                    if (t is double || t is int)
                     {
-                        var gb = Grasshopper.Kernel.GH_Convert.ToGeometryBase(t);
-                        dataTree.Append(new ResthopperObject(gb), path);
+                        var passed = CheckMinMax<T>(t, inputName, schema, ref errors);
+                        if (!passed)
+                            return;
                     }
-                    else
-                    {
-                        if (t is double || t is int)
-                        {
-                            var passed = CheckMinMax<T>(t, inputName, schema, ref errors);
-                            if (!passed)
-                                return;
-                        }
-                        dataTree.Append(new ResthopperObject(t), path);
-                    }
+                    dataTree.Append(new ResthopperObject(t), path);
                 }
             }
             else if (access == GH_ParamAccess.list)
@@ -1175,21 +1352,13 @@ namespace Hops
                     inputCount = list.Count;
                     foreach (var item in list)
                     {
-                        if (convertToGeometryBase)
+                        if (item is double || item is int)
                         {
-                            var gb = Grasshopper.Kernel.GH_Convert.ToGeometryBase(item);
-                            dataTree.Append(new ResthopperObject(gb), path);
+                            var passed = CheckMinMax<T>(item, inputName, schema, ref errors);
+                            if (!passed)
+                                return;
                         }
-                        else
-                        {
-                            if (item is double || item is int)
-                            {
-                                var passed = CheckMinMax<T>(item, inputName, schema, ref errors);
-                                if (!passed)
-                                    return;
-                            }
-                            dataTree.Append(new ResthopperObject(item), path);
-                        }
+                        dataTree.Append(new ResthopperObject(item), path);
                     }
                 }
             }
@@ -1200,14 +1369,13 @@ namespace Hops
             }
         }
 
-        static void CollectDataHelper2<T, GHT>(IGH_DataAccess DA,
+        static void CollectDataHelperWithTree<T, GHT>(IGH_DataAccess DA,
             HopsComponent component,
             string inputName,
             InputParamSchema schema,
             GH_ParamAccess access,
             ref int inputCount,
             DataTree<ResthopperObject> dataTree,
-            ref List<string> warnings,
             ref List<string> errors) where GHT : GH_Goo<T>
         {
             if (access == GH_ParamAccess.tree)
@@ -1222,7 +1390,12 @@ namespace Hops
                         var items = tree[treePath];
                         foreach (var item in items)
                         {
-                            if (item is double || item is int)
+                            // The original check tested `item is double || item is int`, which is
+                            // always false because `item` is a GHT (a reference type) — meaning
+                            // Min/Max validation silently never ran on tree-access numerics.
+                            // Check `item.Value` (typed as T) so the validation actually fires for
+                            // Param_Number and Param_Integer inputs.
+                            if (item.Value is double || item.Value is int)
                             {
                                 var passed = CheckMinMax<T>(item.Value, inputName, schema, ref errors);
                                 if (!passed)
@@ -1235,7 +1408,7 @@ namespace Hops
             }
             else
             {
-                CollectDataHelper<T>(DA, component, inputName, schema, access, ref inputCount, dataTree, ref warnings, ref errors);
+                CollectDataHelper<T>(DA, component, inputName, schema, access, ref inputCount, dataTree, ref errors);
             }
         }
 
@@ -1246,7 +1419,6 @@ namespace Hops
             GH_ParamAccess access,
             ref int inputCount,
             DataTree<ResthopperObject> dataTree,
-            ref List<string> warnings,
             ref List<string> errors)
         {
             string path = "{0}";
@@ -1299,7 +1471,6 @@ namespace Hops
             GH_ParamAccess access,
             ref int inputCount,
             DataTree<ResthopperObject> dataTree,
-            ref List<string> warnings,
             ref List<string> errors)
         {
             string path = "{0}";
@@ -1372,8 +1543,8 @@ namespace Hops
             schema.AbsoluteTolerance = GetDocumentTolerance();
             schema.AngleTolerance = GetDocumentAngleTolerance();
             schema.ModelUnits = GetDocumentUnits();
-            schema.FileName = _filename;
-            schema.DataFormat = _dataFormat;
+            schema.FileName = filename;
+            schema.DataFormat = dataFormat;
 
             schema.CacheSolve = cacheSolveOnServer;
             var inputs = GetInputParams();
@@ -1391,10 +1562,10 @@ namespace Hops
                     string computeName = input.Name;
                     int inputListCount = 0;
                     GH_ParamAccess access = AccessFromInput(input);
-                    if(_dataFormat == SchemaDataFormat.Grasshopper)
+                    if(dataFormat == SchemaDataFormat.Grasshopper)
                     {
                         var goos = new Grasshopper.Kernel.Data.GH_Structure<IGH_Goo>();
-                        CollectDataHelper(DA, _parentComponent, inputName, input, access, ref inputListCount, goos, ref warnings, ref errors);
+                        CollectDataHelper(DA, parentComponent, inputName, input, access, ref inputListCount, goos, ref errors);
                         schema.GrasshopperValues.Values.Add(computeName, goos);
                     }
                     else
@@ -1405,111 +1576,111 @@ namespace Hops
                         switch (param)
                         {
                             case Grasshopper.Kernel.Parameters.Param_Arc _:
-                                CollectDataHelper2<Arc, GH_Arc>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Arc, GH_Arc>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Boolean _:
-                                CollectDataHelper2<bool, GH_Boolean>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<bool, GH_Boolean>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Box _:
-                                CollectDataHelper2<Box, GH_Box>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Box, GH_Box>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Brep _:
-                                CollectDataHelper2<Brep, GH_Brep>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Brep, GH_Brep>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Circle _:
-                                CollectDataHelper2<Circle, GH_Circle>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Circle, GH_Circle>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Colour _:
-                                CollectDataHelper2<System.Drawing.Color, GH_Colour>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<System.Drawing.Color, GH_Colour>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Complex _:
-                                CollectDataHelper2<Complex, GH_ComplexNumber>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Complex, GH_ComplexNumber>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Culture _:
-                                CollectDataHelper2<System.Globalization.CultureInfo, GH_Culture>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<System.Globalization.CultureInfo, GH_Culture>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Curve _:
-                                CollectDataHelper2<Curve, GH_Curve>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Curve, GH_Curve>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Field _:
-                                CollectDataHelper<Grasshopper.Kernel.Types.GH_Field>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelper<Grasshopper.Kernel.Types.GH_Field>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_FilePath _:
-                                CollectDataHelper2<string, GH_String>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<string, GH_String>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_GenericObject _:
                                 throw new Exception("generic objects param not supported");
                             case Grasshopper.Kernel.Parameters.Param_Geometry _:
-                                CollectDataHelperGeometryBase<IGH_GeometricGoo>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperGeometryBase<IGH_GeometricGoo>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Group _:
                                 throw new Exception("group param not supported");
                             case Grasshopper.Kernel.Parameters.Param_Guid _:
-                                CollectDataHelper2<Guid, GH_Guid>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Guid, GH_Guid>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Integer _:
-                                CollectDataHelper2<int, GH_Integer>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<int, GH_Integer>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Interval _:
-                                CollectDataHelper2<Interval, GH_Interval>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Interval, GH_Interval>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Interval2D _:
-                                CollectDataHelper2<UVInterval, GH_Interval2D>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<UVInterval, GH_Interval2D>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_LatLonLocation _:
                                 throw new Exception("latlonlocation param not supported");
                             case Grasshopper.Kernel.Parameters.Param_Line _:
-                                CollectDataHelper2<Line, GH_Line>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Line, GH_Line>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Matrix _:
-                                CollectDataHelper2<Matrix, GH_Matrix>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Matrix, GH_Matrix>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Mesh _:
-                                CollectDataHelper2<Mesh, GH_Mesh>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Mesh, GH_Mesh>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_MeshFace _:
-                                CollectDataHelper2<MeshFace, GH_MeshFace>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<MeshFace, GH_MeshFace>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_MeshParameters _:
-                                CollectDataHelper2<MeshingParameters, GH_MeshingParameters>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<MeshingParameters, GH_MeshingParameters>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Number _:
-                                CollectDataHelper2<double, GH_Number>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<double, GH_Number>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             //case Grasshopper.Kernel.Parameters.Param_OGLShader:
                             case Grasshopper.Kernel.Parameters.Param_Plane _:
-                                CollectDataHelper2<Plane, GH_Plane>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Plane, GH_Plane>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Point _:
-                                CollectDataHelperPoints<Point3d>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperPoints<Point3d>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Rectangle _:
-                                CollectDataHelper2<Rectangle3d, GH_Rectangle>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Rectangle3d, GH_Rectangle>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             //case Grasshopper.Kernel.Parameters.Param_ScriptVariable _:
                             case Grasshopper.Kernel.Parameters.Param_String _:
-                                CollectDataHelper2<string, GH_String>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<string, GH_String>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_StructurePath _:
-                                CollectDataHelper2<Grasshopper.Kernel.Data.GH_Path, GH_StructurePath>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Grasshopper.Kernel.Data.GH_Path, GH_StructurePath>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_SubD _:
-                                CollectDataHelper2<SubD, GH_SubD>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<SubD, GH_SubD>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Surface _:
-                                CollectDataHelper<Surface>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelper<Surface>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Time _:
-                                CollectDataHelper2<DateTime, GH_Time>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<DateTime, GH_Time>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Transform _:
-                                CollectDataHelper2<Transform, GH_Transform>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Transform, GH_Transform>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Parameters.Param_Vector _:
-                                CollectDataHelper2<Vector3d, GH_Vector>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<Vector3d, GH_Vector>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                             case Grasshopper.Kernel.Special.GH_NumberSlider _:
-                                CollectDataHelper2<double, GH_Number>(DA, _parentComponent, inputName, input, access, ref inputListCount, dataTree, ref warnings, ref errors);
+                                CollectDataHelperWithTree<double, GH_Number>(DA, parentComponent, inputName, input, access, ref inputListCount, dataTree, ref errors);
                                 break;
                         }
                     }
@@ -1539,7 +1710,7 @@ namespace Hops
                 var pointer = new Uri(Path).AbsolutePath;
                 schema.Pointer = pointer.Substring(1);
             }
-            _parentComponent.HTTPRecord.Schema = schema;
+            parentComponent.HttpRecord.Schema = schema;
             return schema;
         }
     }
@@ -1547,9 +1718,9 @@ namespace Hops
 
     static class RemoteDefinitionCache
     {
-        static List<RemoteDefinition> _definitions = new List<RemoteDefinition>();
-        static Dictionary<string, FileSystemWatcher> _filewatchers;
-        static HashSet<string> _watchedFiles = new HashSet<string>();
+        static List<RemoteDefinition> definitions = new List<RemoteDefinition>();
+        static Dictionary<string, FileSystemWatcher> filewatchers;
+        static HashSet<string> watchedFiles = new HashSet<string>();
 
         public static void Add(RemoteDefinition definition)
         {
@@ -1560,20 +1731,20 @@ namespace Hops
                 return;
             if (!File.Exists(definition.Path))
                 return;
-            if (_definitions.Contains(definition))
+            if (definitions.Contains(definition))
                 return;
-            _definitions.Add(definition);
+            definitions.Add(definition);
             RegisterFileWatcher(definition.Path);
         }
 
         public static void Remove(RemoteDefinition definition)
         {
-            if (_definitions.Remove(definition) && definition.Path != null)
+            if (definitions.Remove(definition) && definition.Path != null)
             {
                 string path = Path.GetFullPath(definition.Path);
                 string directory = Path.GetDirectoryName(path);
                 bool removeFileWatcher = true;
-                foreach(var existingDefinition in _definitions)
+                foreach(var existingDefinition in definitions)
                 {
                     string existingDefPath = Path.GetFullPath(existingDefinition.Path);
                     string existingDefDirectory = Path.GetDirectoryName(existingDefPath);
@@ -1585,11 +1756,11 @@ namespace Hops
                 }
                 if (removeFileWatcher)
                 {
-                    if (_filewatchers.TryGetValue(directory, out FileSystemWatcher watcher))
+                    if (filewatchers.TryGetValue(directory, out FileSystemWatcher watcher))
                     {
                         watcher.EnableRaisingEvents = false;
                         watcher.Dispose();
-                        _filewatchers.Remove(directory);
+                        filewatchers.Remove(directory);
                     }
                 }
             }
@@ -1600,18 +1771,18 @@ namespace Hops
             if (!File.Exists(path))
                 return;
 
-            if (_filewatchers == null)
+            if (filewatchers == null)
             {
-                _filewatchers = new Dictionary<string, FileSystemWatcher>();
+                filewatchers = new Dictionary<string, FileSystemWatcher>();
             }
 
             path = Path.GetFullPath(path);
-            if (_watchedFiles.Contains(path.ToLowerInvariant()))
+            if (watchedFiles.Contains(path.ToLowerInvariant()))
                 return;
 
-            _watchedFiles.Add(path.ToLowerInvariant());
+            watchedFiles.Add(path.ToLowerInvariant());
             string directory = Path.GetDirectoryName(path);
-            if (_filewatchers.ContainsKey(directory) || !Directory.Exists(directory))
+            if (filewatchers.ContainsKey(directory) || !Directory.Exists(directory))
                 return;
 
             var fsw = new FileSystemWatcher(directory);
@@ -1624,15 +1795,15 @@ namespace Hops
                 NotifyFilters.Security;
             fsw.Changed += Fsw_Changed;
             fsw.EnableRaisingEvents = true;
-            _filewatchers[directory] = fsw;
+            filewatchers[directory] = fsw;
         }
 
         private static void Fsw_Changed(object sender, FileSystemEventArgs e)
         {
             string path = e.FullPath.ToLowerInvariant();
-            if (_watchedFiles.Contains(path))
+            if (watchedFiles.Contains(path))
             {
-                foreach(var definition in _definitions)
+                foreach(var definition in definitions)
                 {
                     string definitionPath = Path.GetFullPath(definition.Path);
                     if( path.Equals(definitionPath, StringComparison.OrdinalIgnoreCase))

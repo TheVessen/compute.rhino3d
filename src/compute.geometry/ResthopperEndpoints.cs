@@ -11,7 +11,6 @@ using System.Net;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Carter;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Rhino.Geometry;
@@ -19,9 +18,9 @@ using Rhino;
 
 namespace compute.geometry
 {
-    public class ResthopperEndpointsModule : ICarterModule
+    public static class ResthopperEndpointsModule
     {
-        public void AddRoutes(IEndpointRouteBuilder app)
+        public static void MapEndpoints(IEndpointRouteBuilder app)
         {
             app.MapPost("/grasshopper", Grasshopper);
             app.MapPost("/io", PostIoNames);
@@ -60,7 +59,7 @@ namespace compute.geometry
             }
         }
 
-        static object _ghsolvelock = new object();
+        static object ghSolveLock = new object();
 
         static string GrasshopperSolveHelper(Schema input, string body, System.Diagnostics.Stopwatch stopwatch, HttpContext ctx)
         {
@@ -165,7 +164,7 @@ namespace compute.geometry
                 // We can narrow down this lock over time. As it stands, launching many
                 // compute instances on one computer is going to be a better solution anyway
                 // to deal with solving many times simultaniously.
-                lock (_ghsolvelock)
+                lock (ghSolveLock)
                 {
                     json = GrasshopperSolveHelper(input, body, stopwatch, ctx);
                 }
@@ -178,15 +177,15 @@ namespace compute.geometry
             }
         }
 
-        async Task GetIoNames(HttpContext ctx)
+        static async Task GetIoNames(HttpContext ctx)
         {
             await GetIoNamesHelper(ctx, true);
         }
-        async Task PostIoNames(HttpContext ctx)
+        static async Task PostIoNames(HttpContext ctx)
         {
             await GetIoNamesHelper(ctx, true);
         }
-        async Task GetIoNamesHelper(HttpContext ctx, bool asPost)
+        static async Task GetIoNamesHelper(HttpContext ctx, bool asPost)
         {
             GrasshopperDefinition definition;
             string fileName = String.Empty;
