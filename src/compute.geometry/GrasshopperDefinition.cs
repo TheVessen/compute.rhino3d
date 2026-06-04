@@ -517,15 +517,64 @@ namespace compute.geometry
             }
         }
 
-        // Geometry contextual inputs arrive as a Rhino CommonObject JSON dictionary; rehydrate
-        // to GeometryBase then wrap as IGH_GeometricGoo. Original code did not null-check before
-        // adding to the tree, so we don't either (preserving behavior).
+        // ── BEGIN VEKTORNODE: SELVA FIX — contextual-geometry struct deserialization ───────
+        // Upstream/8.x DeserializeGeometry assumed an archive dictionary ONLY:
+        //     var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(restobj.Data);
+        //     var gb = Rhino.Runtime.CommonObject.FromJSON(dict) as GeometryBase;
+        //     return GH_Convert.ToGeometricGoo(gb);
+        //
+        // Geometry contextual inputs usually arrive as a Rhino CommonObject archive (Brep / Curve /
+        // Mesh / …) that FromJSON rehydrates. But when the source value was a *struct* — e.g. a
+        // Circle, Arc, or Line — our own output serializer (GetResthopperObject<Circle> et al.) emits
+        // plain property JSON ({"Radius":…,"Plane":…,…}) that has no archive form and that FromJSON
+        // cannot rehydrate. Upstream returned null there → zero geometry / failed solve.
+        //
+        // Fix: mirror DeserializeCurve's try-archive-then-fallback. Attempt the archive shape first,
+        // then coerce the known curve-like structs to a Curve (the only way a struct can become
+        // GeometryBase). Returns null when nothing matches — the original code did not null-check
+        // before adding to the tree, so callers already tolerate null. Input-side only; the output
+        // serializer is intentionally left unchanged so consumers that already parse the struct
+        // property JSON keep working.
         static IGH_GeometricGoo DeserializeGeometry(ResthopperObject restobj)
         {
-            var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(restobj.Data);
-            var gb = Rhino.Runtime.CommonObject.FromJSON(dict) as GeometryBase;
-            return GH_Convert.ToGeometricGoo(gb);
+            try
+            {
+                var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(restobj.Data);
+                if (dict != null && Rhino.Runtime.CommonObject.FromJSON(dict) is GeometryBase gb)
+                    return GH_Convert.ToGeometricGoo(gb);
+            }
+            catch
+            {
+                // Not an archive dictionary — fall through to struct.
+            }
+            
+            
+            // To support another struct (e.g. Rectangle3d, Box), add a line here + its curve coercion.
+            if (TryDeserializeStruct<Circle>(restobj.Data, out var circle) && circle.IsValid)
+                return GH_Convert.ToGeometricGoo(new ArcCurve(circle));
+            if (TryDeserializeStruct<Arc>(restobj.Data, out var arc) && arc.IsValid)
+                return GH_Convert.ToGeometricGoo(new ArcCurve(arc));
+            if (TryDeserializeStruct<Line>(restobj.Data, out var line) && line.IsValid)
+                return GH_Convert.ToGeometricGoo(new LineCurve(line));
+
+            return null;
         }
+
+        // Deserialize a struct geometry from its property-JSON shape.
+        static bool TryDeserializeStruct<T>(string data, out T value) where T : struct
+        {
+            try
+            {
+                value = JsonConvert.DeserializeObject<T>(data);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+        // ── END VEKTORNODE: SELVA FIX — contextual-geometry struct deserialization ─────────
 
         public Schema Solve(int rhinoVersion)
         {
