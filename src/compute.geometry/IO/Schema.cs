@@ -7,7 +7,7 @@ namespace Resthopper.IO
 {
     public class Schema
     {
-        public Schema() {}
+        public Schema() { }
 
         [JsonProperty(PropertyName = "absolutetolerance", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public double AbsoluteTolerance { get; set; } = 0;
@@ -64,6 +64,11 @@ namespace Resthopper.IO
         public string Name { get; set; }
         public string Nickname { get; set; }
         public string ParamType { get; set; }
+
+        // VEKTORNODE: PARAM-ID — Instance Guid of the source Grasshopper parameter, used to
+        // associate schema entries and Resthopper objects with their originating param.
+        [JsonProperty(PropertyName = "id")]
+        public string Id { get; set; }
     }
 
     public class InputParamSchema : IoParamSchema
@@ -75,6 +80,13 @@ namespace Resthopper.IO
         public object Default { get; set; } = null;
         public object Minimum { get; set; } = null;
         public object Maximum { get; set; } = null;
+
+        // VEKTORNODE: IO-HANDLERS — extra input metadata (UI grouping + enumerated values).
+        [JsonProperty(PropertyName = "groupName")]
+        public string GroupName { get; set; } = null;
+
+        [JsonProperty(PropertyName = "values")]
+        public Dictionary<string, string> Values { get; set; } = null;
     }
 
     public class IoResponseSchema
@@ -116,6 +128,10 @@ namespace Resthopper.IO
         [JsonIgnore]
         public object ResolvedData { get; set; }
 
+        // VEKTORNODE: PARAM-ID — Instance Guid of the source Grasshopper parameter this object came from.
+        [JsonProperty(PropertyName = "id")]
+        public Guid Id { get; set; }
+
         [JsonConstructor]
         public ResthopperObject()
         {
@@ -123,9 +139,9 @@ namespace Resthopper.IO
 
         public ResthopperObject(object obj)
         {
-            if(obj is GeometryBase geometry)
+            if (obj is GeometryBase geometry)
             {
-                Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = 7});
+                Data = geometry.ToJSON(new Rhino.FileIO.SerializationOptions() { RhinoVersion = 7 });
             }
             else
             {

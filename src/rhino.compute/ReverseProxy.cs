@@ -100,9 +100,9 @@ namespace rhino.compute
             // existing ApiKeyMiddleware when RHINO_COMPUTE_KEY is configured. Registered before
             // the catch-all proxy route below so they're not forwarded to a compute.geometry child.
             app.MapPost("/shutdown-children", ShutdownChildrenEndpoint);
-            app.MapPost("/recycle-children",  RecycleChildrenEndpoint);
-            app.MapPost("/launch-children",   LaunchChildrenEndpoint);
-            app.MapPost("/launch-child",      LaunchChildEndpoint);
+            app.MapPost("/recycle-children", RecycleChildrenEndpoint);
+            app.MapPost("/launch-children", LaunchChildrenEndpoint);
+            app.MapPost("/launch-child", LaunchChildEndpoint);
 
             // Guard against accidental hits on the internal /shutdown endpoint. Without this,
             // the catch-all proxy below would forward POST /shutdown to one round-robin-selected
@@ -308,6 +308,31 @@ namespace rhino.compute
                 var req = new HttpRequestMessage(HttpMethod.Post, proxyUrl);
                 if (initialRequest.Headers.TryGetValue(API_KEY_HEADER, out var keyHeader))
                     req.Headers.Add(API_KEY_HEADER, keyHeader.ToString());
+
+                // ── BEGIN VEKTORNODE: SELVA FIX ────────────────────────────────────────────
+                // FIX: grasshopper/validate (and any multipart upload) was broken behind IIS.
+                // The original code read every POST body as a plain string and re-sent it with
+                // Content-Type: application/json (even had a typo: "applicaton/json").
+                // That destroyed the multipart boundary, so compute.geometry saw no form files
+                // and returned an "Unknown validation error".
+                // Fix: detect multipart requests and stream the body through as-is so the
+                // boundary and binary content are preserved.
+                var contentType = initialRequest.ContentType ?? string.Empty;
+                if (contentType.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Stream the raw body directly to the downstream request — no MemoryStream
+                    // buffer so the whole file is never duplicated in RAM. The Content-Length
+                    // header is forwarded so the child process gets a known-length body instead
+                    // of chunked transfer encoding.
+                    var streamContent = new StreamContent(initialRequest.Body);
+                    streamContent.Headers.ContentType =
+                        System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+                    if (initialRequest.ContentLength.HasValue)
+                        streamContent.Headers.ContentLength = initialRequest.ContentLength.Value;
+                    req.Content = streamContent;
+                    return await client.SendAsync(req);
+                }
+                // ── END VEKTORNODE: SELVA FIX ──────────────────────────────────────────────
 
                 using (var sw = new System.IO.StreamReader(initialRequest.BodyReader.AsStream()))
                 {

@@ -2,16 +2,14 @@
 using System.IO;
 using System.Net;
 using System.Collections.Generic;
-
+using System.Drawing;
 using Rhino.Geometry;
-
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Special;
 using Grasshopper.Kernel.Types;
 using GH_IO.Serialization;
-
 using Resthopper.IO;
 using Newtonsoft.Json;
 using System.Linq;
@@ -29,12 +27,14 @@ namespace compute.geometry
         {
             get { return watchedFileRuntimeSerialNumber; }
         }
+
         static void RegisterFileWatcher(string path)
         {
             if (filewatchers == null)
             {
                 filewatchers = new Dictionary<string, FileSystemWatcher>();
             }
+
             if (!File.Exists(path))
                 return;
 
@@ -49,12 +49,12 @@ namespace compute.geometry
 
             var fsw = new FileSystemWatcher(directory);
             fsw.NotifyFilter = NotifyFilters.Attributes |
-                NotifyFilters.CreationTime |
-                NotifyFilters.FileName |
-                NotifyFilters.LastAccess |
-                NotifyFilters.LastWrite |
-                NotifyFilters.Size |
-                NotifyFilters.Security;
+                               NotifyFilters.CreationTime |
+                               NotifyFilters.FileName |
+                               NotifyFilters.LastAccess |
+                               NotifyFilters.LastWrite |
+                               NotifyFilters.Size |
+                               NotifyFilters.Security;
             fsw.Changed += Fsw_Changed;
             fsw.EnableRaisingEvents = true;
             filewatchers[directory] = fsw;
@@ -96,11 +96,13 @@ namespace compute.geometry
                 rc.CacheKey = url;
                 rc.IsLocalFileDefinition = !UrlGuard.IsWebUrl(url) && File.Exists(url);
             }
+
             if (cache)
             {
                 DataCache.SetCachedDefinition(url, rc, null);
                 rc.InDataCache = true;
             }
+
             return rc;
         }
 
@@ -111,7 +113,7 @@ namespace compute.geometry
                 return null;
 
             var rc = Construct(archive);
-            if (rc!=null)
+            if (rc != null)
             {
                 rc.CacheKey = DataCache.CreateCacheKey(data);
                 if (cache)
@@ -120,13 +122,14 @@ namespace compute.geometry
                     rc.InDataCache = true;
                 }
             }
+
             return rc;
         }
 
         private static GrasshopperDefinition Construct(Guid componentId)
         {
             var component = Grasshopper.Instances.ComponentServer.EmitObject(componentId) as GH_Component;
-            if (component==null)
+            if (component == null)
                 return null;
 
             var definition = new GH_Document();
@@ -144,46 +147,53 @@ namespace compute.geometry
 
             GrasshopperDefinition rc = new GrasshopperDefinition(definition, null);
             rc.singularComponent = component;
-            foreach(var input in component.Params.Input)
+            foreach (var input in component.Params.Input)
             {
                 rc.input[input.NickName] = new InputGroup(input);
             }
-            foreach(var output in component.Params.Output)
+
+            foreach (var output in component.Params.Output)
             {
                 rc.output[output.NickName] = output;
             }
+
             return rc;
         }
+
         private static void AddInput(IGH_Param param, string name, ref GrasshopperDefinition rc)
         {
             if (rc.input.ContainsKey(name))
             {
-                string msg = "Multiple input parameters with the same name were detected. Parameter names must be unique.";
+                string msg =
+                    "Multiple input parameters with the same name were detected. Parameter names must be unique.";
                 rc.HasErrors = true;
                 rc.ErrorMessages.Add(msg);
                 LogError(msg);
-            }   
+            }
             else
                 rc.input[name] = new InputGroup(param);
         }
+
         private static void AddOutput(IGH_Param param, string name, ref GrasshopperDefinition rc)
         {
             if (rc.output.ContainsKey(name))
             {
-                string msg = "Multiple output parameters with the same name were detected. Parameter names must be unique.";
+                string msg =
+                    $"Multiple output parameters with the same name '{name}' were detected. Parameter names must be unique.";
                 rc.HasErrors = true;
                 rc.ErrorMessages.Add(msg);
                 LogError(msg);
-            }  
+            }
             else
                 rc.output[name] = param;
         }
+
 
         private static GrasshopperDefinition Construct(GH_Archive archive)
         {
             string icon = null;
             var chunk = archive.GetRootNode.FindChunk("Definition");
-            if (chunk!=null)
+            if (chunk != null)
             {
                 chunk = chunk.FindChunk("DefinitionProperties");
                 if (chunk != null)
@@ -211,12 +221,12 @@ namespace compute.geometry
             }
 
             GrasshopperDefinition rc = new GrasshopperDefinition(definition, icon);
-            foreach( var obj in definition.Objects)
+            foreach (var obj in definition.Objects)
             {
                 IGH_ContextualParameter contextualParam = obj as IGH_ContextualParameter;
                 if (contextualParam != null)
                 {
-                    IGH_Param param = obj as IGH_Param;          
+                    IGH_Param param = obj as IGH_Param;
                     if (param != null && !param.Locked)
                     {
                         AddInput(param, param.NickName, ref rc);
@@ -243,8 +253,9 @@ namespace compute.geometry
                     {
                         IGH_Param param = contextPrinter.Params.Input[0];
                         AddOutput(param, param.NickName, ref rc);
-                    }  
+                    }
                 }
+
 
                 var group = obj as GH_Group;
                 if (group == null)
@@ -252,7 +263,7 @@ namespace compute.geometry
 
                 string nickname = group.NickName;
                 var groupObjects = group.Objects();
-                if ( nickname.Contains("RH_IN") && groupObjects.Count>0)
+                if (nickname.Contains("RH_IN") && groupObjects.Count > 0)
                 {
                     var param = groupObjects[0] as IGH_Param;
                     if (param != null && !param.Locked)
@@ -267,12 +278,12 @@ namespace compute.geometry
                     {
                         AddOutput(param, nickname, ref rc);
                     }
-                    else if(groupObjects[0] is GH_Component component)
+                    else if (groupObjects[0] is GH_Component component)
                     {
                         int outputCount = component.Params.Output.Count;
-                        for(int i=0; i<outputCount; i++)
+                        for (int i = 0; i < outputCount; i++)
                         {
-                            if(1==outputCount)
+                            if (1 == outputCount)
                             {
                                 AddOutput(component.Params.Output[i], nickname, ref rc);
                             }
@@ -285,6 +296,7 @@ namespace compute.geometry
                     }
                 }
             }
+
             return rc;
         }
 
@@ -323,7 +335,7 @@ namespace compute.geometry
             var skippedInputs = new List<string>();
             foreach (var tree in values)
             {
-                if( !input.TryGetValue(tree.ParamName, out var inputGroup))
+                if (!input.TryGetValue(tree.ParamName, out var inputGroup))
                 {
                     continue;
                 }
@@ -369,33 +381,63 @@ namespace compute.geometry
                         case "Geometry":
                             BuildAndAssignContextualTree(contextualParameter, tree, DeserializeGeometry);
                             break;
+                        // Color and File arrive as (possibly escaped) JSON strings; DeserializeText
+                        // already does the JsonConvert-with-Regex.Unescape fallback these need.
+                        case "Color":
+                            BuildAndAssignContextualTree(contextualParameter, tree, DeserializeText);
+                            break;
+                        case "File":
+                            BuildAndAssignContextualTree(contextualParameter, tree, DeserializeText);
+                            break;
+                        // ValueList assigns via SetValues (a flat string list), not a contextual
+                        // data tree, so it can't use BuildAndAssignContextualTree.
+                        case "ValueList":
+                            {
+                                var stringList = new List<string>();
+                                foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
+                                {
+                                    for (int i = 0; i < entree.Value.Count; i++)
+                                    {
+                                        ResthopperObject restobj = entree.Value[i];
+                                        string data;
+                                        try
+                                        { data = JsonConvert.DeserializeObject<string>(restobj.Data) ?? restobj.Data.Trim('"'); }
+                                        catch { data = restobj.Data.Trim('"'); }
+                                        stringList.Add(data);
+                                    }
+                                }
+                                contextualParameter.GetType()
+                                    .GetMethod("SetValues")?
+                                    .Invoke(contextualParameter, new object[] { stringList });
+                            }
+                            break;
                     }
                     continue;
                 }
-                
+
                 inputGroup.Param.VolatileData.Clear();
                 inputGroup.Param.ExpireSolution(false); // mark param as expired but don't recompute just yet!
 
                 Func<ResthopperObject, IGH_Goo> convert = inputGroup.Param switch
                 {
-                    Param_Point _      => r => new GH_Point(JsonConvert.DeserializeObject<Point3d>(r.Data)),
-                    Param_Vector _     => r => new GH_Vector(JsonConvert.DeserializeObject<Vector3d>(r.Data)),
-                    Param_Integer _    => r => new GH_Integer(JsonConvert.DeserializeObject<int>(r.Data)),
-                    Param_Number _     => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
-                    Param_String _     => r => new GH_String(r.Data),
-                    Param_Line _       => r => new GH_Line(JsonConvert.DeserializeObject<Line>(r.Data)),
-                    Param_Curve _      => DeserializeCurve,
-                    Param_Circle _     => r => new GH_Circle(JsonConvert.DeserializeObject<Circle>(r.Data)),
-                    Param_Plane _      => r => new GH_Plane(JsonConvert.DeserializeObject<Plane>(r.Data)),
-                    Param_Rectangle _  => r => new GH_Rectangle(JsonConvert.DeserializeObject<Rectangle3d>(r.Data)),
-                    Param_Box _        => r => new GH_Box(JsonConvert.DeserializeObject<Box>(r.Data)),
-                    Param_Surface _    => r => new GH_Surface(JsonConvert.DeserializeObject<Surface>(r.Data)),
-                    Param_Brep _       => r => new GH_Brep(JsonConvert.DeserializeObject<Brep>(r.Data)),
-                    Param_Mesh _       => r => new GH_Mesh(JsonConvert.DeserializeObject<Mesh>(r.Data)),
-                    GH_NumberSlider _  => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
+                    Param_Point _ => r => new GH_Point(JsonConvert.DeserializeObject<Point3d>(r.Data)),
+                    Param_Vector _ => r => new GH_Vector(JsonConvert.DeserializeObject<Vector3d>(r.Data)),
+                    Param_Integer _ => r => new GH_Integer(JsonConvert.DeserializeObject<int>(r.Data)),
+                    Param_Number _ => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
+                    Param_String _ => r => new GH_String(r.Data),
+                    Param_Line _ => r => new GH_Line(JsonConvert.DeserializeObject<Line>(r.Data)),
+                    Param_Curve _ => DeserializeCurve,
+                    Param_Circle _ => r => new GH_Circle(JsonConvert.DeserializeObject<Circle>(r.Data)),
+                    Param_Plane _ => r => new GH_Plane(JsonConvert.DeserializeObject<Plane>(r.Data)),
+                    Param_Rectangle _ => r => new GH_Rectangle(JsonConvert.DeserializeObject<Rectangle3d>(r.Data)),
+                    Param_Box _ => r => new GH_Box(JsonConvert.DeserializeObject<Box>(r.Data)),
+                    Param_Surface _ => r => new GH_Surface(JsonConvert.DeserializeObject<Surface>(r.Data)),
+                    Param_Brep _ => r => new GH_Brep(JsonConvert.DeserializeObject<Brep>(r.Data)),
+                    Param_Mesh _ => r => new GH_Mesh(JsonConvert.DeserializeObject<Mesh>(r.Data)),
+                    GH_NumberSlider _ => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
                     Param_Boolean _ or GH_BooleanToggle _ => r => new GH_Boolean(JsonConvert.DeserializeObject<bool>(r.Data)),
-                    GH_Panel _         => r => new GH_String(JsonConvert.DeserializeObject<string>(r.Data)),
-                    _                  => null
+                    GH_Panel _ => r => new GH_String(JsonConvert.DeserializeObject<string>(r.Data)),
+                    _ => null
                 };
                 if (convert != null)
                     AddTreeData(inputGroup.Param, tree, convert);
@@ -495,7 +537,7 @@ namespace compute.geometry
             Definition.Enabled = true;
             Definition.NewSolution(false, GH_SolutionMode.CommandLine);
 
-            foreach(string msg in ErrorMessages)
+            foreach (string msg in ErrorMessages)
             {
                 outputSchema.Errors.Add(msg);
             }
@@ -508,12 +550,17 @@ namespace compute.geometry
                 if (param == null)
                     continue;
 
-                Resthopper.IO.DataTree<ResthopperObject> outputTree = SerializeDataTree(param.VolatileData, kvp.Key, rhinoVersion) as Resthopper.IO.DataTree<ResthopperObject>;
+
+                Resthopper.IO.DataTree<ResthopperObject> outputTree =
+                    SerializeDataTree(param.VolatileData, param.Attributes.Parent.InstanceGuid, kvp.Key, rhinoVersion) as
+                        Resthopper.IO.DataTree<ResthopperObject>;
+
                 outputSchema.Values.Add(outputTree);
             }
 
             if (outputSchema.Values.Count < 1)
-                throw new System.Exceptions.PayAttentionException("Looks like you've missed something..."); // TODO
+                throw new System.Exceptions.PayAttentionException(
+                    "Looks like you've missed something... No outputs found"); // TODO
 
             // Setting warnings and errors to null ever so slightly shrinks down the json sent back to the client
             if (outputSchema.Warnings.Count < 1)
@@ -524,7 +571,9 @@ namespace compute.geometry
             return outputSchema;
         }
 
-        private static object SerializeDataTree(IGH_Structure data, string name, int rhinoVersion = 7)
+        // VEKTORNODE: PARAM-ID — paramId is threaded through so every emitted ResthopperObject
+        // is tagged with its source parameter's Guid (see ResthopperObject.Id / IoParamSchema.Id).
+        private static object SerializeDataTree(IGH_Structure data, Guid paramId, string name, int rhinoVersion = 7)
         {
             // Get data
             var outputTree = new Resthopper.IO.DataTree<ResthopperObject>();
@@ -538,48 +587,99 @@ namespace compute.geometry
                     if (goo == null)
                         continue;
 
+                    // VEKTORNODE: SELVA — SDK seam: any Goo implementing ISelvaSerializableGoo (matched by
+                    // interface name, not assembly reference) owns its compute JSON. The wire Type stays the
+                    // unwrapped value's type name so the client demux is unchanged. See Selva.GH
+                    // ISelvaSerializableGoo.
+                    if (goo is IGH_Goo selvaGoo && TryGetSelvaGooJson(selvaGoo, out string selvaJson))
+                    {
+                        // Mirror TryGetSelvaGooJson's unwrap so Type derives from the inner goo.
+                        var innerGoo = selvaGoo is GH_ObjectWrapper w && w.Value is IGH_Goo ig ? ig : selvaGoo;
+                        var value = innerGoo.GetType().GetProperty("Value")?.GetValue(innerGoo);
+                        resthopperObjectList.Add(new ResthopperObject
+                        {
+                            Type = (value ?? innerGoo).GetType().FullName,
+                            Id = paramId,
+                            Data = selvaJson
+                        });
+                        continue;
+                    }
+
+                    // VEKTORNODE: SELVA (DEPRECATED) — DELETE THIS BLOCK in a future major. Serializes Selva output Goos from
+                    // OLD plugin builds (Selva.GH + selva-canopy) that predate ISelvaSerializableGoo. New
+                    // Goos match the marker case above and never reach here; this only catches an old .gha
+                    // solved by a newer compute. Safe to remove once every deployed Selva-family plugin
+                    // ships the marker.
+                    {
+                        var deprecatedName = goo.GetType().FullName;
+                        if (deprecatedName != null &&
+                            (deprecatedName.IndexOf("WebDisplay", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             deprecatedName.IndexOf("FileDataGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             deprecatedName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             deprecatedName.IndexOf("PlotlyFigure", StringComparison.OrdinalIgnoreCase) >= 0))
+                        {
+                            var deprecatedValue = goo.GetType().GetProperty("Value")?.GetValue(goo);
+                            var deprecatedObj = GetResthopperObject<object>(deprecatedValue, rhinoVersion);
+                            if (deprecatedObj != null)
+                            {
+                                deprecatedObj.Id = paramId;
+                                resthopperObjectList.Add(deprecatedObj);
+                            }
+                            continue;
+                        }
+                    }
+
                     // GH_Surface unwraps to Brep (its .Value is a Brep), preserved from the original.
                     // Unrecognized goo types are silently skipped, matching the original switch's
                     // implicit fall-through to no-op.
+                    // Switch arms are kept identical to upstream/8.x; the source-parameter Id is
+                    // tagged once after the switch (Selva: output objects are looked up by Id client-side).
                     ResthopperObject resthopperObject = goo switch
                     {
-                        GH_Boolean g           => GetResthopperObject<bool>(g.Value, rhinoVersion),
-                        GH_Point g             => GetResthopperObject<Point3d>(g.Value, rhinoVersion),
-                        GH_Vector g            => GetResthopperObject<Vector3d>(g.Value, rhinoVersion),
-                        GH_Integer g           => GetResthopperObject<int>(g.Value, rhinoVersion),
-                        GH_Number g            => GetResthopperObject<double>(g.Value, rhinoVersion),
-                        GH_String g            => GetResthopperObject<string>(g.Value, rhinoVersion),
-                        GH_SubD g              => GetResthopperObject<SubD>(g.Value, rhinoVersion),
-                        GH_Line g              => GetResthopperObject<Line>(g.Value, rhinoVersion),
-                        GH_Curve g             => GetResthopperObject<Curve>(g.Value, rhinoVersion),
-                        GH_Circle g            => GetResthopperObject<Circle>(g.Value, rhinoVersion),
-                        GH_Arc g               => GetResthopperObject<Arc>(g.Value, rhinoVersion),
-                        GH_Plane g             => GetResthopperObject<Plane>(g.Value, rhinoVersion),
-                        GH_Rectangle g         => GetResthopperObject<Rectangle3d>(g.Value, rhinoVersion),
-                        GH_Box g               => GetResthopperObject<Box>(g.Value, rhinoVersion),
-                        GH_Surface g           => GetResthopperObject<Brep>(g.Value, rhinoVersion),
-                        GH_Brep g              => GetResthopperObject<Brep>(g.Value, rhinoVersion),
-                        GH_Mesh g              => GetResthopperObject<Mesh>(g.Value, rhinoVersion),
-                        GH_Extrusion g         => GetResthopperObject<Extrusion>(g.Value, rhinoVersion),
-                        GH_PointCloud g        => GetResthopperObject<PointCloud>(g.Value, rhinoVersion),
+                        GH_Boolean g => GetResthopperObject<bool>(g.Value, rhinoVersion),
+                        GH_Point g => GetResthopperObject<Point3d>(g.Value, rhinoVersion),
+                        GH_Vector g => GetResthopperObject<Vector3d>(g.Value, rhinoVersion),
+                        GH_Integer g => GetResthopperObject<int>(g.Value, rhinoVersion),
+                        GH_Number g => GetResthopperObject<double>(g.Value, rhinoVersion),
+                        GH_String g => GetResthopperObject<string>(g.Value, rhinoVersion),
+                        GH_SubD g => GetResthopperObject<SubD>(g.Value, rhinoVersion),
+                        GH_Line g => GetResthopperObject<Line>(g.Value, rhinoVersion),
+                        GH_Curve g => GetResthopperObject<Curve>(g.Value, rhinoVersion),
+                        GH_Circle g => GetResthopperObject<Circle>(g.Value, rhinoVersion),
+                        GH_Arc g => GetResthopperObject<Arc>(g.Value, rhinoVersion),
+                        GH_Plane g => GetResthopperObject<Plane>(g.Value, rhinoVersion),
+                        GH_Rectangle g => GetResthopperObject<Rectangle3d>(g.Value, rhinoVersion),
+                        GH_Box g => GetResthopperObject<Box>(g.Value, rhinoVersion),
+                        GH_Surface g => GetResthopperObject<Brep>(g.Value, rhinoVersion),
+                        GH_Brep g => GetResthopperObject<Brep>(g.Value, rhinoVersion),
+                        GH_Mesh g => GetResthopperObject<Mesh>(g.Value, rhinoVersion),
+                        GH_Extrusion g => GetResthopperObject<Extrusion>(g.Value, rhinoVersion),
+                        GH_PointCloud g => GetResthopperObject<PointCloud>(g.Value, rhinoVersion),
                         GH_InstanceReference g => GetResthopperObject<InstanceReferenceGeometry>(g.Value, rhinoVersion),
-                        GH_Hatch g             => GetResthopperObject<Hatch>(g.Value, rhinoVersion),
-                        GH_LinearDimension g   => GetResthopperObject<LinearDimension>(g.Value, rhinoVersion),
-                        GH_RadialDimension g   => GetResthopperObject<RadialDimension>(g.Value, rhinoVersion),
-                        GH_AngularDimension g  => GetResthopperObject<AngularDimension>(g.Value, rhinoVersion),
+                        GH_Hatch g => GetResthopperObject<Hatch>(g.Value, rhinoVersion),
+                        GH_LinearDimension g => GetResthopperObject<LinearDimension>(g.Value, rhinoVersion),
+                        GH_RadialDimension g => GetResthopperObject<RadialDimension>(g.Value, rhinoVersion),
+                        GH_AngularDimension g => GetResthopperObject<AngularDimension>(g.Value, rhinoVersion),
                         GH_OrdinateDimension g => GetResthopperObject<OrdinateDimension>(g.Value, rhinoVersion),
-                        GH_Leader g            => GetResthopperObject<Leader>(g.Value, rhinoVersion),
-                        GH_TextEntity g        => GetResthopperObject<TextEntity>(g.Value, rhinoVersion),
-                        GH_TextDot g           => GetResthopperObject<TextDot>(g.Value, rhinoVersion),
-                        GH_Centermark g        => GetResthopperObject<Centermark>(g.Value, rhinoVersion),
-                        _                      => null
+                        GH_Leader g => GetResthopperObject<Leader>(g.Value, rhinoVersion),
+                        GH_TextEntity g => GetResthopperObject<TextEntity>(g.Value, rhinoVersion),
+                        GH_TextDot g => GetResthopperObject<TextDot>(g.Value, rhinoVersion),
+                        GH_Centermark g => GetResthopperObject<Centermark>(g.Value, rhinoVersion),
+                        // VEKTORNODE: IO-HANDLERS — Color output handler (not in upstream/8.x).
+                        GH_Colour g => GetResthopperObject<Color>(g.Value, rhinoVersion),
+                        _ => null
                     };
                     if (resthopperObject != null)
+                    {
+                        resthopperObject.Id = paramId;
                         resthopperObjectList.Add(resthopperObject);
+                    }
                 }
+
                 // preserve paths when returning data
                 outputTree.Add(path.ToString(), resthopperObjectList);
             }
+
             return outputTree;
         }
 
@@ -594,6 +694,7 @@ namespace compute.geometry
                     schema.Errors.Add(errorMsg);
                     HasErrors = true;
                 }
+
                 if (Config.Debug)
                 {
                     foreach (var msg in obj.RuntimeMessages(GH_RuntimeMessageLevel.Warning))
@@ -602,12 +703,48 @@ namespace compute.geometry
                         Log.Warning(warningMsg);
                         schema.Warnings.Add(warningMsg);
                     }
+
                     foreach (var msg in obj.RuntimeMessages(GH_RuntimeMessageLevel.Remark))
                     {
                         LogDebug($"Remark in grasshopper component: \"{obj.Name}\" ({obj.InstanceGuid}): {msg}");
                     }
                 }
             }
+        }
+
+        // ============================================================================
+        // Selva SDK seam (reflection-based, no plugin assembly reference)
+        // ============================================================================
+
+        // True when the type (or any implemented interface) is named exactly `interfaceName`. Matched
+        // by simple name so every Selva-family plugin can declare its own copy of the contract interface
+        // without a shared assembly. See Selva.GH ISelvaOutput / ISelvaSerializableGoo.
+        static bool ImplementsSelvaInterface(Type type, string interfaceName)
+        {
+            foreach (var i in type.GetInterfaces())
+            {
+                if (i.Name == interfaceName)
+                    return true;
+            }
+
+            return false;
+        }
+
+        // True when a Goo owns its compute wire format (ISelvaSerializableGoo.ToComputeJson()).
+        // Unwraps GH_ObjectWrapper: custom Selva goo arrives wrapped on a generic ContextBake input,
+        // so the interface check must run against the inner goo, not the wrapper.
+        static bool TryGetSelvaGooJson(IGH_Goo goo, out string json)
+        {
+            json = null;
+            if (goo is GH_ObjectWrapper wrapper && wrapper.Value is IGH_Goo innerGoo)
+                goo = innerGoo;
+
+            Type t = goo.GetType();
+            if (!ImplementsSelvaInterface(t, "ISelvaSerializableGoo"))
+                return false;
+
+            json = t.GetMethod("ToComputeJson")?.Invoke(goo, null) as string;
+            return json != null;
         }
 
         static string ParamTypeName(IGH_Param param)
@@ -618,6 +755,7 @@ namespace compute.geometry
             {
                 return "Geometry";
             }
+
             return param.TypeName;
         }
 
@@ -627,12 +765,12 @@ namespace compute.geometry
                 return iconString;
 
             System.Drawing.Bitmap bmp = null;
-            if (singularComponent!=null)
+            if (singularComponent != null)
             {
                 bmp = singularComponent.Icon_24x24;
             }
 
-            if (bmp!=null)
+            if (bmp != null)
             {
                 using (var ms = new MemoryStream())
                 {
@@ -643,6 +781,7 @@ namespace compute.geometry
                     return rc;
                 }
             }
+
             return null;
         }
 
@@ -671,6 +810,9 @@ namespace compute.geometry
                     Default = i.Value.GetDefault(),
                     Minimum = i.Value.GetMinimum(),
                     Maximum = i.Value.GetMaximum(),
+                    GroupName = i.Value.GetGroupName(),
+                    Values = i.Value.GetValues(),
+                    Id = i.Value.Param.InstanceGuid.ToString()
                 };
                 if (singularComponent != null)
                 {
@@ -680,22 +822,19 @@ namespace compute.geometry
                         inputSchema.AtMost = inputSchema.AtLeast;
                     }
                 }
+
                 inputs.Add(inputSchema);
             }
 
             foreach (var o in sortedOutputs)
             {
                 outputNames.Add(o.Key);
-                outputs.Add(new IoParamSchema
-                {
-                    Name = o.Key,
-                    ParamType = o.Value.TypeName
-                });
+                outputs.Add(new IoParamSchema { Name = o.Key, ParamType = o.Value.TypeName, Id = o.Value.InstanceGuid.ToString() });
             }
 
-            string description = singularComponent == null ?
-                Definition.Properties.Description :
-                singularComponent.Description;
+            string description = singularComponent == null
+                ? Definition.Properties.Description
+                : singularComponent.Description;
 
             return new IoResponseSchema
             {
@@ -721,6 +860,7 @@ namespace compute.geometry
                     RegisterFileWatcher(url);
                     return archive;
                 }
+
                 return null;
             }
 
@@ -755,6 +895,7 @@ namespace compute.geometry
                 if (xmlArchive.Deserialize_Xml(grasshopperXml))
                     return xmlArchive;
             }
+
             return null;
         }
 
@@ -791,6 +932,11 @@ namespace compute.geometry
 
         static ResthopperObject GetResthopperObject<T>(object goo, int rhinoVerion)
         {
+            // Reflection-based callers (e.g. the deprecated Selva branch) may pass a null
+            // value when a goo's Value property is unset; skip rather than dereference it.
+            if (goo == null)
+                return null;
+
             var v = (T)goo;
             ResthopperObject rhObj = new ResthopperObject();
             rhObj.Type = goo.GetType().FullName;
@@ -806,13 +952,14 @@ namespace compute.geometry
         class InputGroup
         {
             object defaultValue = null;
+
             public InputGroup(IGH_Param param)
             {
                 Param = param;
 
                 param.ClearData();
                 param.CollectData();
-                defaultValue = SerializeDataTree(param.VolatileData, param.Name);
+                defaultValue = SerializeDataTree(param.VolatileData, Param.InstanceGuid, param.Name);
             }
 
             public IGH_Param Param { get; }
@@ -824,16 +971,18 @@ namespace compute.geometry
                 {
                     return contextualParameter.Prompt;
                 }
+
                 return null;
             }
 
             public int GetAtLeast()
             {
                 IGH_ContextualParameter contextualParameter = Param as IGH_ContextualParameter;
-                if(contextualParameter!=null)
+                if (contextualParameter != null)
                 {
                     return contextualParameter.AtLeast;
                 }
+
                 return 1;
             }
 
@@ -844,6 +993,7 @@ namespace compute.geometry
                 {
                     return contextualParameter.AtMost;
                 }
+
                 if (Param is GH_NumberSlider)
                     return 1;
                 return int.MaxValue;
@@ -854,15 +1004,30 @@ namespace compute.geometry
                 IGH_ContextualParameter contextualParameter = Param as IGH_ContextualParameter;
                 if (contextualParameter != null)
                 {
-                    var result = contextualParameter.GetType().GetProperty("TreeAccess")?.GetValue(contextualParameter, null);
-                    if(result != null)
+                    var result = contextualParameter.GetType().GetProperty("TreeAccess")
+                        ?.GetValue(contextualParameter, null);
+                    if (result != null)
                         return (bool)result;
                 }
+
                 return false;
             }
 
             public object GetDefault()
             {
+                // First check if this is a contextual parameter with a custom default value
+                if (Param is IGH_ContextualParameter contextualParam)
+                {
+                    var method = contextualParam.GetType().GetMethod("GetDefaultValue");
+                    if (method != null)
+                    {
+                        var result = method.Invoke(contextualParam, null);
+                        if (result != null)
+                            return result; // Return the string directly
+                    }
+                }
+
+                // Fall back to original behavior (serialize data tree)
                 return defaultValue;
             }
 
@@ -876,7 +1041,7 @@ namespace compute.geometry
                     var pType = par.GetType();
                     var props = pType.GetProperties(BindingFlags.NonPublic | BindingFlags.Instance);
                     var info = props.FirstOrDefault(x => x.Name == "Minimum");
-                    if(info != null)
+                    if (info != null)
                     {
                         var val = info.GetValue(par, null);
                         if (val != null)
@@ -898,7 +1063,7 @@ namespace compute.geometry
                     if (p.Sources.Count == 1)
                         p = p.Sources[0];
                 }
-                
+
                 if (p is GH_NumberSlider paramSlider)
                     return (double)paramSlider.Slider.Minimum;
                 return null;
@@ -914,7 +1079,7 @@ namespace compute.geometry
                     var pTypeName = ParamTypeName(p);
                     var props = pType.GetProperties(BindingFlags.NonPublic | BindingFlags.Instance);
                     var info = props.FirstOrDefault(x => x.Name == "Maximum");
-                    if(info != null)
+                    if (info != null)
                     {
                         var val = info.GetValue(par, null);
                         if (val != null)
@@ -941,6 +1106,129 @@ namespace compute.geometry
                     return (double)paramSlider.Slider.Maximum;
 
                 return null;
+            }
+
+            /// <summary>
+            /// Gets the full hierarchical group name for the parameter (e.g., "Layer_1::Layer_2::Layer_3")
+            /// </summary>
+            /// <returns>
+            /// The group name as a string, or null if not found.
+            /// </returns>
+            public string GetGroupName()
+            {
+                var document = Param.OnPingDocument();
+                if (document == null)
+                    return null;
+
+                var allGroups = document.Objects.OfType<GH_Group>().ToList();
+
+                // Find all groups that contain this parameter (directly or through nested groups)
+                var allGroupsContainingParam = allGroups
+                    .Where(g => !string.IsNullOrEmpty(g.NickName) &&
+                                GroupContainsParameterRecursively(g, Param.InstanceGuid, allGroups))
+                    .ToList();
+
+                if (!allGroupsContainingParam.Any())
+                    return null;
+
+                if (allGroupsContainingParam.Count == 1)
+                    return allGroupsContainingParam.First().NickName;
+
+                // Build hierarchy by finding parent-child relationships
+                var hierarchy = BuildGroupHierarchy(allGroupsContainingParam);
+
+                return string.Join("::", hierarchy.Select(g => g.NickName));
+            }
+
+            public Dictionary<string, string> GetValues()
+            {
+                if (Param is IGH_ContextualParameter contextualParam)
+                {
+                    var pType = contextualParam.GetType();
+                    var props = pType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                    var valuesInfo = props.FirstOrDefault(x => x.Name == "Values");
+                    if (valuesInfo != null)
+                    {
+                        var val = valuesInfo.GetValue(contextualParam, null);
+                        if (val is Dictionary<string, string> dict)
+                            return dict;
+                    }
+                }
+
+                return null;
+            }
+
+            /// <summary>
+            /// Recursively checks if a group contains a parameter (directly or through nested child groups)
+            /// </summary>
+            private bool GroupContainsParameterRecursively(GH_Group group, Guid paramGuid, List<GH_Group> allGroups)
+            {
+                // Check if parameter is directly in this group
+                if (group.Objects().Any(obj => obj.InstanceGuid == paramGuid))
+                    return true;
+
+                // Check if any child groups contain the parameter
+                var childGroups = allGroups
+                    .Where(g => g.InstanceGuid != group.InstanceGuid &&
+                                group.Objects().Any(obj => obj.InstanceGuid == g.InstanceGuid))
+                    .ToList();
+
+                foreach (var childGroup in childGroups)
+                {
+                    if (GroupContainsParameterRecursively(childGroup, paramGuid, allGroups))
+                        return true;
+                }
+
+                return false;
+            }
+
+            private List<GH_Group> BuildGroupHierarchy(List<GH_Group> groups)
+            {
+                var hierarchy = new List<GH_Group>();
+                var remaining = new List<GH_Group>(groups);
+
+                // Start with groups that are not contained in any other group (root groups)
+                while (remaining.Any())
+                {
+                    var rootGroup = remaining.FirstOrDefault(g =>
+                        !remaining.Any(other => other != g && GroupContainsGroup(other, g)));
+
+                    if (rootGroup == null)
+                    {
+                        // Fallback: if we can't determine hierarchy, just return the first group
+                        hierarchy.AddRange(remaining);
+                        break;
+                    }
+
+                    hierarchy.Add(rootGroup);
+                    remaining.Remove(rootGroup);
+
+                    // Now find the next level - groups that are directly contained in the rootGroup
+                    var childGroups = remaining.Where(g => GroupContainsGroup(rootGroup, g)).ToList();
+
+                    // If there are child groups, continue with the most nested one
+                    if (childGroups.Any())
+                    {
+                        // Remove child groups from remaining as we'll process them next
+                        foreach (var child in childGroups)
+                            remaining.Remove(child);
+
+                        // Continue with child groups (recursive approach)
+                        var childHierarchy = BuildGroupHierarchy(childGroups);
+                        hierarchy.AddRange(childHierarchy);
+                        break; // We've found our path
+                    }
+                }
+
+                var filteredHierarchy = hierarchy.Where(g => !g.NickName.Contains("RH_IN")).ToList();
+
+                return filteredHierarchy;
+            }
+
+            private bool GroupContainsGroup(GH_Group parentGroup, GH_Group childGroup)
+            {
+                // Check if parentGroup contains childGroup as one of its objects
+                return parentGroup.Objects().Any(obj => obj.InstanceGuid == childGroup.InstanceGuid);
             }
 
             public bool AlreadySet(Resthopper.IO.DataTree<ResthopperObject> tree)
