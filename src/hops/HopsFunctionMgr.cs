@@ -103,67 +103,72 @@ namespace Hops
             }
         }
 
-        static Image _funcMgr24Icon;
-        static Image _funcMgr48Icon;
-        static Image _deleteIcon;
-        static Image _addIcon;
-        static Image _editIcon;
+        static Image settingsIcon;
+        static Image statusOkIcon;
+        static Image statusErrorIcon;
+        static Image statusWarningIcon;
+        static Image statusNoneIcon;
 
-        public static Image FuncMgr24Icon()
+        public static Image SettingsIcon()
         {
-            if (_funcMgr24Icon == null)
+            if (settingsIcon == null)
             {
-                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Hops_Function_Mgr_24x24.png");
-                _funcMgr24Icon = Image.FromStream(stream);
+                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Settings_96x96.png");
+                settingsIcon = Image.FromStream(stream);
             }
-            return _funcMgr24Icon;
+            return settingsIcon;
         }
-        public static Image FuncMgr48Icon()
+        public static Image StatusOkIcon()
         {
-            if (_funcMgr48Icon == null)
+            if (statusOkIcon == null)
             {
-                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Hops_Function_Mgr_48x48.png");
-                _funcMgr48Icon = Image.FromStream(stream);
+                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.OK_24x24.png");
+                statusOkIcon = Image.FromStream(stream);
             }
-            return _funcMgr48Icon;
+            return statusOkIcon;
         }
-        public static Image DeleteIcon()
+        public static Image StatusErrorIcon()
         {
-            if (_deleteIcon == null)
+            if (statusErrorIcon == null)
             {
-                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Close_Toolbar_Active_20x20.png");
-                _deleteIcon = Image.FromStream(stream);
+                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Error_24x24.png");
+                statusErrorIcon = Image.FromStream(stream);
             }
-            return _deleteIcon;
+            return statusErrorIcon;
         }
-        public static Image AddIcon()
+        public static Image StatusWarningIcon()
         {
-            if (_addIcon == null)
+            if (statusWarningIcon == null)
             {
-                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Open_Toolbar_Active_20x20.png");
-                _addIcon = Image.FromStream(stream);
+                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.Warning_24x24.png");
+                statusWarningIcon = Image.FromStream(stream);
             }
-            return _addIcon;
+            return statusWarningIcon;
         }
-        public static Image EditIcon()
+        public static Image StatusNoneIcon()
         {
-            if (_editIcon == null)
+            if (statusNoneIcon == null)
             {
-                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.edit_16x16.png");
-                _editIcon = Image.FromStream(stream);
+                var stream = typeof(HopsComponent).Assembly.GetManifestResourceStream("Hops.resources.None_24x24.png");
+                statusNoneIcon = Image.FromStream(stream);
             }
-            return _editIcon;
+            return statusNoneIcon;
         }
-        static System.Net.Http.HttpClient _httpClient = null;
+        static System.Net.Http.HttpClient httpClient = null;
         public static System.Net.Http.HttpClient HttpClient
         {
             get
             {
-                if (_httpClient == null)
+                if (httpClient == null)
                 {
-                    _httpClient = new System.Net.Http.HttpClient();
+                    // Per-request deadlines come from the call site's CancellationTokenSource
+                    // so HopsAppSettings.HttpTimeout values larger than 100s aren't capped here.
+                    httpClient = new System.Net.Http.HttpClient
+                    {
+                        Timeout = System.Threading.Timeout.InfiniteTimeSpan
+                    };
                 }
-                return _httpClient;
+                return httpClient;
             }
         }
     }

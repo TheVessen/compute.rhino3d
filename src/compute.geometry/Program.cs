@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Serilog;
-using Carter;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 
@@ -18,14 +17,30 @@ namespace compute.geometry
     {
         public static IDisposable RhinoCore { get; set; }
         public static DateTime StartTime { get; set; }
-        static string _RhinoSystemDirectory { get; set; }
+        static string rhinoSystemDirectory { get; set; }
 
         static void Main(string[] args)
         {
             Config.Load();
-            Logging.Init();
+            // Pre-scan for -port:N so it can be enriched into every log line. Full arg
+            // parsing happens below; this is just a peek so the logger has the port from
+            // the very first line. Without it, "Logging to ..." and any deprecation
+            // warnings would land with an empty port column.
+            Logging.Init(FindPortArg(args));
 
             ParseCommandLineArgs(args);
+
+            // Loud warning if the server is starting unauthenticated. The ApiKeyMiddleware
+            // only wires up when Config.ApiKey is non-empty, so a missing key means every
+            // POST endpoint accepts any caller. Operators sometimes don't realize the env
+            // var didn't propagate (running process predates the setx, IIS app pool not
+            // recycled, etc.) — this surfaces the problem at startup instead of silently.
+            // Skip it when launched by rhino.compute (signalled by -childof:<pid>, which
+            // populates Shutdown.ParentProcesses during ParseCommandLineArgs): the parent
+            // already prints this same warning, so emitting it per child just duplicates it.
+            bool launchedByRhinoCompute = Shutdown.ParentProcesses != null && Shutdown.ParentProcesses.Count > 0;
+            if (!launchedByRhinoCompute && string.IsNullOrWhiteSpace(Config.ApiKey))
+                Log.Warning("RHINO_COMPUTE_KEY is not set; API authentication is disabled. All endpoints are open to any caller.");
 
 #if DEBUG
             // Uncomment the following to debug with core Rhino source. This
@@ -35,14 +50,14 @@ namespace compute.geometry
 
             //string rhinoSystemDir = @"C:\dev\github\mcneel\rhino8\src4\bin\Debug";
             //if (System.IO.File.Exists(rhinoSystemDir + "\\Rhino.exe"))
-            //    _RhinoSystemDirectory = rhinoSystemDir;
+            //    rhinoSystemDirectory = rhinoSystemDir;
 
 #endif
 
-            if (String.IsNullOrEmpty(_RhinoSystemDirectory))
+            if (String.IsNullOrEmpty(rhinoSystemDirectory))
                 RhinoInside.Resolver.Initialize();
             else
-                RhinoInside.Resolver.Initialize(_RhinoSystemDirectory);
+                RhinoInside.Resolver.Initialize(rhinoSystemDirectory);
 
 
             StartTime = DateTime.Now;
@@ -56,8 +71,12 @@ namespace compute.geometry
                 {
                     var b = webBuilder.ConfigureKestrel((context, options) =>
                     {
-                        // Handle requests up to 50 MB
-                        options.Limits.MaxRequestBodySize = null;//Config.MaxRequestSize;
+                        // Cap request body to Config.MaxRequestSize (default 50 MB, override via
+                        // RHINO_COMPUTE_MAX_REQUEST_SIZE). Previously this was set to null
+                        // (unlimited), which allowed a single caller to send an unbounded body
+                        // and exhaust server memory. The env var name matches rhino.compute's
+                        // so child processes inherit the parent's configured value automatically.
+                        options.Limits.MaxRequestBodySize = Config.MaxRequestSize;
                         if (Config.LocalhostPort>0)
                             options.ListenLocalhost(Config.LocalhostPort);
                     })
@@ -74,6 +93,29 @@ namespace compute.geometry
                 })
                 .UseSerilog(Log.Logger)
                 .Build();
+
+            // When the port wasn't passed via -port:N (standalone launches), Kestrel binds
+            // to its default URL once the host starts. Pull the bound port from
+            // IServerAddressesFeature and push it into DynamicPortEnricher so subsequent
+            // log lines render as "CG NNNN [...]".
+            var lifetime = (Microsoft.Extensions.Hosting.IHostApplicationLifetime)
+                host.Services.GetService(typeof(Microsoft.Extensions.Hosting.IHostApplicationLifetime));
+            lifetime?.ApplicationStarted.Register(() =>
+            {
+                var server = (Microsoft.AspNetCore.Hosting.Server.IServer)
+                    host.Services.GetService(typeof(Microsoft.AspNetCore.Hosting.Server.IServer));
+                var addresses = server?.Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
+                if (addresses == null) return;
+                foreach (var url in addresses.Addresses)
+                {
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Port > 0)
+                    {
+                        DynamicPortEnricher.SetPort(uri.Port);
+                        break;
+                    }
+                }
+            });
+
             Shutdown.StartTimer(host);
             host.Run();
 
@@ -122,7 +164,7 @@ namespace compute.geometry
                         }
                         break;
                     case "rhinosysdir":
-                        _RhinoSystemDirectory = value;
+                        rhinoSystemDirectory = value;
                         break;
                     case "load-grasshopper":
                         {
@@ -141,6 +183,17 @@ namespace compute.geometry
                         break;
                 }
             }
+        }
+
+        static int FindPortArg(string[] args)
+        {
+            foreach (var arg in args)
+            {
+                SplitArg(arg, out string key, out string value);
+                if (key == "port" && int.TryParse(value, out int port))
+                    return port;
+            }
+            return 0;
         }
 
         static void SplitArg(string arg, out string key, out string value)
@@ -174,9 +227,9 @@ namespace compute.geometry
     }
 
 
-    public class RhinoGetModule : ICarterModule
+    public static class RhinoGetModule
     {
-        public void AddRoutes(IEndpointRouteBuilder app)
+        public static void MapEndpoints(IEndpointRouteBuilder app)
         {
             app.MapGet("/sdk", context => SdkEndpoint(context, app));
             app.MapGet("/sdk/csharp", context => CSharpSdk(context));
@@ -245,9 +298,9 @@ namespace compute.geometry
         }
     }
 
-    public class RhinoPostModule : ICarterModule
+    public static class RhinoPostModule
     {
-        public void AddRoutes(IEndpointRouteBuilder app)
+        public static void MapEndpoints(IEndpointRouteBuilder app)
         {
             foreach (var endpoint in GeometryEndPoint.AllEndPoints)
             {

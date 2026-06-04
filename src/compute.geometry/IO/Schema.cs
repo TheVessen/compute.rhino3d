@@ -130,27 +130,18 @@ namespace Resthopper.IO
         public List<string> Errors { get; set; } = new List<string>();
     }
 
-    public class HTTPRecord
+    public class HttpRecord
     {
-        public HTTPRecord() {}
+        public HttpRecord()
+        {
 
-        [JsonProperty("iorequest")]
-        public string IORequest { get; set; }
-
-        [JsonProperty("ioresponse")]
-        public string IOResponse { get; set; }
-
-        [JsonProperty("solverequest")]
+        }
+        public string IoRequest { get; set; }
+        public string IoResponse { get; set; }
         public string SolveRequest { get; set; }
-
-        [JsonProperty("solveresponse")]
         public string SolveResponse { get; set; }
-
-        [JsonProperty("schema")]
         public Schema Schema { get; set; }
-
-        [JsonProperty("ioresponseschema")]
-        public IoResponseSchema IOResponseSchema { get; set; }
+        public IoResponseSchema IoResponseSchema { get; set; }
     }
 
     public class ResthopperObject : IEquatable<ResthopperObject>

@@ -11,7 +11,6 @@ using System.Net;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Carter;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Rhino.Geometry;
@@ -19,9 +18,9 @@ using Rhino;
 
 namespace compute.geometry
 {
-    public class ResthopperEndpointsModule : ICarterModule
+    public static class ResthopperEndpointsModule
     {
-        public void AddRoutes(IEndpointRouteBuilder app)
+        public static void MapEndpoints(IEndpointRouteBuilder app)
         {
             app.MapPost("/grasshopper", Grasshopper);
             app.MapPost("/io", PostIoNames);
@@ -60,7 +59,7 @@ namespace compute.geometry
             }
         }
 
-        static object _ghsolvelock = new object();
+        static object ghSolveLock = new object();
 
         static string GrasshopperSolveHelper(Schema input, string body, System.Diagnostics.Stopwatch stopwatch, HttpContext ctx)
         {
@@ -100,7 +99,6 @@ namespace compute.geometry
             }
             int recursionLevel = input.RecursionLevel + 1;
             definition.Definition.DefineConstant("ComputeRecursionLevel", new Grasshopper.Kernel.Expressions.GH_Variant(recursionLevel));
-            Serilog.Log.Debug("Setting input values");
             definition.SetInputs(input.Values);
             long decodeTime = stopwatch.ElapsedMilliseconds;
             stopwatch.Restart();
@@ -114,7 +112,7 @@ namespace compute.geometry
             stopwatch.Restart();
             string returnJson = JsonConvert.SerializeObject(output, GeometryResolver.Settings(input.DataVersion));
             long encodeTime = stopwatch.ElapsedMilliseconds;
-            ctx.Response.Headers.Add("Server-Timing", $"decode;dur={decodeTime}, solve;dur={solveTime}, encode;dur={encodeTime}");
+            ctx.Response.Headers["Server-Timing"] = $"decode;dur={decodeTime}, solve;dur={solveTime}, encode;dur={encodeTime}";
             if (definition.HasErrors)
                 ctx.Response.StatusCode = 500; // internal server error
             else
@@ -169,7 +167,7 @@ namespace compute.geometry
                 // We can narrow down this lock over time. As it stands, launching many
                 // compute instances on one computer is going to be a better solution anyway
                 // to deal with solving many times simultaniously.
-                lock (_ghsolvelock)
+                lock (ghSolveLock)
                 {
                     json = GrasshopperSolveHelper(input, body, stopwatch, ctx);
                 }
@@ -182,25 +180,38 @@ namespace compute.geometry
             }
         }
 
-        async Task GetIoNames(HttpContext ctx)
+        static async Task GetIoNames(HttpContext ctx)
         {
             await GetIoNamesHelper(ctx, true);
         }
-        async Task PostIoNames(HttpContext ctx)
+        static async Task PostIoNames(HttpContext ctx)
         {
             await GetIoNamesHelper(ctx, true);
         }
-        async Task GetIoNamesHelper(HttpContext ctx, bool asPost)
+        static async Task GetIoNamesHelper(HttpContext ctx, bool asPost)
         {
             GrasshopperDefinition definition;
             string fileName = String.Empty;
             if (asPost)
             {
-                var body = await new System.IO.StreamReader(ctx.Request.Body).ReadToEndAsync();
-                if (body.StartsWith("[") && body.EndsWith("]"))
-                    body = body.Substring(1, body.Length - 2);
-
-                Schema input = JsonConvert.DeserializeObject<Schema>(body);
+                // Stream-deserialize the request body asynchronously instead of materializing
+                // it as a string first. Saves ~MaxRequestSize bytes of peak memory per request
+                // (default 50 MB) since we don't hold both the stream buffer AND a full string
+                // copy in memory at the same time. Uses Newtonsoft's async APIs (ReadFromAsync,
+                // ReadAsync) so the underlying reads on Request.Body are async — Kestrel
+                // disallows synchronous IO on the request stream by default.
+                //
+                // Historical request shape: the body is sometimes wrapped in a single-element
+                // JSON array (`[{...}]`). Detect that via the parsed token kind and unwrap.
+                Schema input;
+                using (var streamReader = new System.IO.StreamReader(ctx.Request.Body))
+                using (var jsonReader = new Newtonsoft.Json.JsonTextReader(streamReader))
+                {
+                    var token = await Newtonsoft.Json.Linq.JToken.ReadFromAsync(jsonReader);
+                    if (token is Newtonsoft.Json.Linq.JArray ja && ja.Count > 0)
+                        token = ja[0];
+                    input = token.ToObject<Schema>();
+                }
 
                 string httpType = ctx.Request.IsHttps ? "HTTPS" : "HTTP";
                 string endpoint = ctx.GetEndpoint().DisplayName;
