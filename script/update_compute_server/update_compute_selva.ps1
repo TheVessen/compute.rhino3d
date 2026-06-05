@@ -464,6 +464,14 @@ function Test-ComputeHealth {
         }
         catch {
             $lastError = $_
+            # A 401/403 means the endpoint is up and responding — it is just
+            # rejecting an unauthenticated request. That is "healthy" for a
+            # deploy check: the service is listening and serving HTTP.
+            $status = $_.Exception.Response.StatusCode.value__
+            if ($status -eq 401 -or $status -eq 403) {
+                Write-Log "Health check: service responded HTTP $status (auth required) — treating as healthy." -Level "SUCCESS"
+                return $true
+            }
         }
         Start-Sleep -Seconds 2
     }
