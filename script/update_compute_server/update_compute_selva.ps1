@@ -557,6 +557,17 @@ try {
         Write-Log "Could not read current version info: $_" -Level "WARN"
     }
 
+    # rhino.compute.exe carries a hardcoded 1.0.0.0 assembly version, so it is
+    # useless for telling builds apart. compute.geometry.exe carries the real,
+    # changing build version — capture it for the before/after summary.
+    try {
+        $currentGeometryVersion = (Get-Item $computeGeometryExe).VersionInfo.FileVersion
+        Write-Log "Currently installed compute.geometry version: $currentGeometryVersion"
+    }
+    catch {
+        Write-Log "Could not read current compute.geometry version info: $_" -Level "WARN"
+    }
+
     # ----------------------------------------------------------
     # 2. Resolve latest artifact (with pagination)
     # ----------------------------------------------------------
