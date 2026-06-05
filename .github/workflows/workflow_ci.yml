@@ -70,7 +70,7 @@ jobs:
       - name: build
         run: dotnet publish src/compute.sln -c Release
       - name: artifacts
-        if: github.ref == 'refs/heads/8.x'
+        if: github.ref == 'refs/heads/8.x.selva'
         uses: actions/upload-artifact@v4
         with:
           path: src/dist
