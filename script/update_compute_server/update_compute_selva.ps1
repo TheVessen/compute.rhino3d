@@ -342,22 +342,38 @@ function Invoke-Download {
     )
     Write-Log "Downloading: $Url"
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Primary: .NET WebClient. On Windows PowerShell 5.1, Invoke-WebRequest can
+    # hang indefinitely on a mid-stream stall (its -TimeoutSec only covers the
+    # initial response, not a redirect target that connects then goes silent).
+    # WebClient with an explicit timeout aborts a dead transfer instead of
+    # sitting forever — which is what forced the manual Ctrl+C before.
     try {
-        Write-Log "Attempting download via Invoke-WebRequest..."
-        $ProgressPreference = "SilentlyContinue"
-        Invoke-WebRequest -Uri $Url `
-                          -OutFile $Output `
-                          -TimeoutSec $TimeoutSeconds `
-                          -UseBasicParsing `
-                          -Headers @{ "User-Agent" = "update-compute-script/3.0" } `
-                          -ErrorAction Stop
-        $ProgressPreference = "Continue"
-        Write-Log "Invoke-WebRequest complete." -Level "SUCCESS"
+        Write-Log "Attempting download via WebClient..."
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("User-Agent", "update-compute-script/3.0")
+        $wc.DownloadFile($Url, $Output)
+        $wc.Dispose()
+        Write-Log "WebClient download complete." -Level "SUCCESS"
     }
     catch {
-        Write-Log "Invoke-WebRequest failed ($_), falling back to BITS..." -Level "WARN"
-        Start-BitsTransfer -Source $Url -Destination $Output -DisplayName "RhinoCompute Update" -ErrorAction Stop
-        Write-Log "BITS transfer complete." -Level "SUCCESS"
+        Write-Log "WebClient failed ($_), falling back to Invoke-WebRequest..." -Level "WARN"
+        try {
+            $ProgressPreference = "SilentlyContinue"
+            Invoke-WebRequest -Uri $Url `
+                              -OutFile $Output `
+                              -TimeoutSec $TimeoutSeconds `
+                              -UseBasicParsing `
+                              -Headers @{ "User-Agent" = "update-compute-script/3.0" } `
+                              -ErrorAction Stop
+            $ProgressPreference = "Continue"
+            Write-Log "Invoke-WebRequest complete." -Level "SUCCESS"
+        }
+        catch {
+            Write-Log "Invoke-WebRequest failed ($_), falling back to BITS..." -Level "WARN"
+            Start-BitsTransfer -Source $Url -Destination $Output -DisplayName "RhinoCompute Update" -ErrorAction Stop
+            Write-Log "BITS transfer complete." -Level "SUCCESS"
+        }
     }
     Write-Log "Download complete -> $Output"
 }
