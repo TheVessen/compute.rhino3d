@@ -517,24 +517,17 @@ namespace compute.geometry
             }
         }
 
-        // ── BEGIN VEKTORNODE: SELVA FIX — contextual-geometry struct deserialization ───────
-        // Upstream/8.x DeserializeGeometry assumed an archive dictionary ONLY:
-        //     var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(restobj.Data);
-        //     var gb = Rhino.Runtime.CommonObject.FromJSON(dict) as GeometryBase;
-        //     return GH_Convert.ToGeometricGoo(gb);
-        //
-        // Geometry contextual inputs usually arrive as a Rhino CommonObject archive (Brep / Curve /
-        // Mesh / …) that FromJSON rehydrates. But when the source value was a *struct* — e.g. a
-        // Circle, Arc, or Line — our own output serializer (GetResthopperObject<Circle> et al.) emits
-        // plain property JSON ({"Radius":…,"Plane":…,…}) that has no archive form and that FromJSON
-        // cannot rehydrate. Upstream returned null there → zero geometry / failed solve.
-        //
-        // Fix: mirror DeserializeCurve's try-archive-then-fallback. Attempt the archive shape first,
-        // then coerce the known curve-like structs to a Curve (the only way a struct can become
-        // GeometryBase). Returns null when nothing matches — the original code did not null-check
-        // before adding to the tree, so callers already tolerate null. Input-side only; the output
-        // serializer is intentionally left unchanged so consumers that already parse the struct
-        // property JSON keep working.
+        // Geometry contextual inputs (Param_Geometry / GetGeometry parameters) arrive in one of
+        // two wire formats depending on the client:
+        //   1. CommonObject dictionary-archive JSON — produced by Hops (which calls
+        //      GH_Convert.ToGeometryBase before sending) and by other clients that wrap
+        //      geometry through CommonObject.ToJSON. Rehydrate via CommonObject.FromJSON.
+        //   2. Flat property-bag JSON — produced by non-Hops clients (compute.rhino3d.py,
+        //      compute.rhino3d.js, custom callers) when serializing Rhino value-type structs
+        //      (Line, Arc, Circle) directly with JsonConvert. These don't derive from
+        //      CommonObject and won't rehydrate via FromJSON; deserialize as the raw struct
+        //      and wrap in the matching curve type so the downstream pipeline sees a
+        //      GeometryBase.
         static IGH_GeometricGoo DeserializeGeometry(ResthopperObject restobj)
         {
             try
@@ -543,12 +536,8 @@ namespace compute.geometry
                 if (dict != null && Rhino.Runtime.CommonObject.FromJSON(dict) is GeometryBase gb)
                     return GH_Convert.ToGeometricGoo(gb);
             }
-            catch
-            {
-                // Not an archive dictionary — fall through to struct.
-            }
-            
-            
+            catch (JsonException) { /* not a CommonObject archive — fall through to struct path */ }
+
             // To support another struct (e.g. Rectangle3d, Box), add a line here + its curve coercion.
             if (TryDeserializeStruct<Circle>(restobj.Data, out var circle) && circle.IsValid)
                 return GH_Convert.ToGeometricGoo(new ArcCurve(circle));
@@ -563,18 +552,9 @@ namespace compute.geometry
         // Deserialize a struct geometry from its property-JSON shape.
         static bool TryDeserializeStruct<T>(string data, out T value) where T : struct
         {
-            try
-            {
-                value = JsonConvert.DeserializeObject<T>(data);
-                return true;
-            }
-            catch
-            {
-                value = default;
-                return false;
-            }
+            try { value = JsonConvert.DeserializeObject<T>(data); return true; }
+            catch (JsonException) { value = default; return false; }
         }
-        // ── END VEKTORNODE: SELVA FIX — contextual-geometry struct deserialization ─────────
 
         public Schema Solve(int rhinoVersion)
         {
