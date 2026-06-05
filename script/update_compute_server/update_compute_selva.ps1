@@ -658,6 +658,14 @@ try {
         Write-Log "Could not read staged version info: $_" -Level "WARN"
     }
 
+    try {
+        $newGeometryVersion = (Get-Item "$stagedComputeGeometry\compute.geometry.exe").VersionInfo.FileVersion
+        Write-Log "Staged compute.geometry version: $newGeometryVersion" -Level "SUCCESS"
+    }
+    catch {
+        Write-Log "Could not read staged compute.geometry version info: $_" -Level "WARN"
+    }
+
     # ----------------------------------------------------------
     # 4. Stop IIS site, then App Pool (releases all file handles)
     # ----------------------------------------------------------
@@ -798,8 +806,10 @@ try {
     Write-Log ("=" * 60)
     Write-Log "UPDATE COMPLETED SUCCESSFULLY" -Level "SUCCESS"
     Write-Log ("=" * 60)
-    Write-Log "Previous version: $currentVersion"
-    Write-Log "New version:      $newVersion"
+    Write-Log "Previous rhino.compute version:   $currentVersion"
+    Write-Log "New rhino.compute version:        $newVersion"
+    Write-Log "Previous compute.geometry version: $currentGeometryVersion"
+    Write-Log "New compute.geometry version:      $newGeometryVersion"
     Write-Log "Backup retained at: $backupDir"
     Write-Log "Log file: $logFile"
 
