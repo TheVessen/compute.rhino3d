@@ -1,0 +1,41 @@
+# Normalize line endings to match upstream mcneel/compute.rhino3d (CRLF for
+# source) so checkouts/commits don't introduce whole-file line-ending diffs.
+# Without this, core.autocrlf differences between machines cause drift.
+
+# Default: let git decide, but normalize text on commit.
+* text=auto
+
+# Source and text files — force CRLF to match upstream working tree.
+*.cs        text eol=crlf
+*.csproj    text eol=crlf
+*.sln       text eol=crlf
+*.config    text eol=crlf
+*.json      text eol=crlf
+*.xml       text eol=crlf
+*.md        text eol=crlf
+*.txt       text eol=crlf
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.yml       text eol=crlf
+*.yaml      text eol=crlf
+
+# Shell scripts must stay LF or they break on *nix.
+*.sh        text eol=lf
+
+# Python — LF is conventional even on Windows checkouts.
+*.py        text eol=lf
+
+# Binary assets — never touch.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.gh        binary
+*.ghx       binary
+*.3dm       binary
+*.afdesign  binary
+*.dll       binary
+*.pdb       binary
+*.zip       binary

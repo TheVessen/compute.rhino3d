@@ -1,0 +1,8 @@
+{
+  // Disable format-on-save for PowerShell so the PowerShell extension stops
+  // reformatting .ps1 files (e.g. collapsing aligned `=` signs) and creating
+  // whitespace drift. C#/other formatting is unaffected.
+  "[powershell]": {
+    "editor.formatOnSave": false
+  }
+}
