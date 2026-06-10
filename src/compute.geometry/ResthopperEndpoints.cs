@@ -31,7 +31,7 @@ namespace compute.geometry
         {
             if (absoluteTolerance <= 0 || angleToleranceDegrees <= 0)
                 return;
- 
+
             var utilityType = typeof(Grasshopper.Utility);
             if (utilityType != null)
             {
@@ -40,7 +40,7 @@ namespace compute.geometry
                 {
                     method.Invoke(null, new object[] { absoluteTolerance, angleToleranceDegrees });
                 }
-            }         
+            }
         }
 
         static void SetDefaultUnits(string modelUnits)
@@ -66,7 +66,8 @@ namespace compute.geometry
             string httpType = ctx.Request.IsHttps ? "HTTPS" : "HTTP";
             string endpoint = ctx.GetEndpoint().DisplayName;
             var index = endpoint.IndexOf('/');
-            if (index >= 0) endpoint = endpoint.Substring(index);           
+            if (index >= 0)
+                endpoint = endpoint.Substring(index);
             Serilog.Log.Debug($"Received a {httpType} {ctx.Request.Method} request to the {endpoint} endpoint");
 
             // load grasshopper file
@@ -138,7 +139,7 @@ namespace compute.geometry
             if (body.StartsWith("[") && body.EndsWith("]"))
                 body = body.Substring(1, body.Length - 2);
             Schema input = JsonConvert.DeserializeObject<Schema>(body);
-           
+
             if (input.CacheSolve)
             {
                 // look in the cache to see if this has already been solved
@@ -176,7 +177,13 @@ namespace compute.geometry
             if (!string.IsNullOrEmpty(json))
             {
                 ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(json);
+                // Send the body with a Content-Length header so the
+                // size is known up front. Without it, the response is sent in chunks, which
+                // the Node client fails to read on a 500 error, causing the request to hang
+                // until it times out.
+                var payload = System.Text.Encoding.UTF8.GetBytes(json);
+                ctx.Response.ContentLength = payload.Length;
+                await ctx.Response.Body.WriteAsync(payload, 0, payload.Length);
             }
         }
 
@@ -216,14 +223,15 @@ namespace compute.geometry
                 string httpType = ctx.Request.IsHttps ? "HTTPS" : "HTTP";
                 string endpoint = ctx.GetEndpoint().DisplayName;
                 var index = endpoint.IndexOf('/');
-                if (index >= 0) endpoint = endpoint.Substring(index);        
+                if (index >= 0)
+                    endpoint = endpoint.Substring(index);
                 Serilog.Log.Debug($"Received a {httpType} {ctx.Request.Method} request to the {endpoint} endpoint");
                 if (!String.IsNullOrEmpty(input.FileName))
                 {
                     fileName = input.FileName;
                     Serilog.Log.Debug($"Deserializing {fileName}");
                 }
-                    
+
                 // load grasshopper file
                 definition = GrasshopperDefinition.FromUrl(input.Pointer, true);
                 if (definition == null)
@@ -242,7 +250,7 @@ namespace compute.geometry
                 Serilog.Log.Warning(msg);
                 throw new Exception(msg);
             }
-                
+
             var responseSchema = definition.GetInputsAndOutputs();
 
             var inputSuffix = String.Empty;
