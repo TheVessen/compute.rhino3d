@@ -316,6 +316,14 @@ namespace compute.geometry
 
         public void SetInputs(Schema inputSchema)
         {
+            // Collect names of inputs that were actually updated vs ones whose value was already
+            // current, and log each group as a single summary line at the end. With many
+            // parameters and one changed value, per-input messages drowned out anything useful.
+            // Both wire formats (Grasshopper and the legacy DataTree<ResthopperObject>) feed
+            // into the same two lists so the log output is consistent across them.
+            var updatedInputs = new List<string>();
+            var skippedInputs = new List<string>();
+
             if (inputSchema.DataFormat == SchemaDataFormat.Grasshopper)
             {
                 foreach (var entry in inputSchema.GrasshopperValues.Values)
@@ -324,6 +332,7 @@ namespace compute.geometry
                     {
                         continue;
                     }
+                    updatedInputs.Add(entry.Key);
                     inputGroup.Param.ClearData();
                     inputGroup.Param.ExpireSolution(false); // mark param as expired but don't recompute just yet!
                     inputGroup.Param.AddVolatileDataTree(entry.Value);
@@ -340,10 +349,11 @@ namespace compute.geometry
 
                     if (inputGroup.AlreadySet(tree))
                     {
-                        LogDebug("Skipping input tree... same input");
+                        skippedInputs.Add(tree.ParamName);
                         continue;
                     }
 
+                    updatedInputs.Add(tree.ParamName);
                     inputGroup.CacheTree(tree);
 
                     IGH_ContextualParameter contextualParameter = inputGroup.Param as IGH_ContextualParameter;
@@ -419,27 +429,55 @@ namespace compute.geometry
                     // original cascade — fixing it would change wire-format behavior for one of them.
                     Func<ResthopperObject, IGH_Goo> convert = inputGroup.Param switch
                     {
-                        Param_Point _      => r => new GH_Point(JsonConvert.DeserializeObject<Point3d>(r.Data)),
-                        Param_Vector _     => r => new GH_Vector(JsonConvert.DeserializeObject<Vector3d>(r.Data)),
-                        Param_Integer _    => r => new GH_Integer(JsonConvert.DeserializeObject<int>(r.Data)),
-                        Param_Number _     => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
-                        Param_String _     => r => new GH_String(r.Data),
-                        Param_Line _       => r => new GH_Line(JsonConvert.DeserializeObject<Line>(r.Data)),
-                        Param_Curve _      => DeserializeCurve,
-                        Param_Circle _     => r => new GH_Circle(JsonConvert.DeserializeObject<Circle>(r.Data)),
-                        Param_Plane _      => r => new GH_Plane(JsonConvert.DeserializeObject<Plane>(r.Data)),
-                        Param_Rectangle _  => r => new GH_Rectangle(JsonConvert.DeserializeObject<Rectangle3d>(r.Data)),
-                        Param_Box _        => r => new GH_Box(JsonConvert.DeserializeObject<Box>(r.Data)),
-                        Param_Surface _    => r => new GH_Surface(JsonConvert.DeserializeObject<Surface>(r.Data)),
-                        Param_Brep _       => r => new GH_Brep(JsonConvert.DeserializeObject<Brep>(r.Data)),
-                        Param_Mesh _       => r => new GH_Mesh(JsonConvert.DeserializeObject<Mesh>(r.Data)),
-                        GH_NumberSlider _  => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
+                        Param_Point _ => r => new GH_Point(JsonConvert.DeserializeObject<Point3d>(r.Data)),
+                        Param_Vector _ => r => new GH_Vector(JsonConvert.DeserializeObject<Vector3d>(r.Data)),
+                        Param_Integer _ => r => new GH_Integer(JsonConvert.DeserializeObject<int>(r.Data)),
+                        Param_Number _ => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
+                        Param_String _ => r => new GH_String(r.Data),
+                        Param_Line _ => r => new GH_Line(JsonConvert.DeserializeObject<Line>(r.Data)),
+                        Param_Curve _ => DeserializeCurve,
+                        Param_Circle _ => r => new GH_Circle(JsonConvert.DeserializeObject<Circle>(r.Data)),
+                        Param_Plane _ => r => new GH_Plane(JsonConvert.DeserializeObject<Plane>(r.Data)),
+                        Param_Rectangle _ => r => new GH_Rectangle(JsonConvert.DeserializeObject<Rectangle3d>(r.Data)),
+                        Param_Box _ => r => new GH_Box(JsonConvert.DeserializeObject<Box>(r.Data)),
+                        Param_Surface _ => r => new GH_Surface(JsonConvert.DeserializeObject<Surface>(r.Data)),
+                        Param_Brep _ => r => new GH_Brep(JsonConvert.DeserializeObject<Brep>(r.Data)),
+                        Param_Mesh _ => r => new GH_Mesh(JsonConvert.DeserializeObject<Mesh>(r.Data)),
+                        GH_NumberSlider _ => r => new GH_Number(JsonConvert.DeserializeObject<double>(r.Data)),
                         Param_Boolean _ or GH_BooleanToggle _ => r => new GH_Boolean(JsonConvert.DeserializeObject<bool>(r.Data)),
-                        GH_Panel _         => r => new GH_String(JsonConvert.DeserializeObject<string>(r.Data)),
-                        _                  => null
+                        GH_Panel _ => r => new GH_String(JsonConvert.DeserializeObject<string>(r.Data)),
+                        _ => null
                     };
                     if (convert != null)
                         AddTreeData(inputGroup.Param, tree, convert);
+                }
+            }
+
+            if (inputSchema.DataFormat == SchemaDataFormat.Grasshopper)
+            {
+                // The Grasshopper wire format ships a full archive of model objects on every
+                // solve, so per-input set/skip accounting isn't meaningful here — every entry
+                // we processed got applied. Emit a count-only heartbeat so the line is honest
+                // (we can't tell what the user actually changed without diffing the archive
+                // against the previous solve, which isn't worth the cost).
+                if (updatedInputs.Count > 0)
+                {
+                    string valueWord = updatedInputs.Count == 1 ? "value" : "values";
+                    LogDebug($"Applied {updatedInputs.Count} input parameter {valueWord}");
+                }
+            }
+            else
+            {
+                if (updatedInputs.Count > 0)
+                {
+                    string valueWord = updatedInputs.Count == 1 ? "value" : "values";
+                    string inputWord = updatedInputs.Count == 1 ? "input" : "inputs";
+                    LogDebug($"Setting {valueWord} for {updatedInputs.Count} {inputWord}: {string.Join(", ", updatedInputs)}");
+                }
+                if (skippedInputs.Count > 0)
+                {
+                    string inputWord = skippedInputs.Count == 1 ? "input" : "inputs";
+                    LogDebug($"Skipping {skippedInputs.Count} unchanged {inputWord}: {string.Join(", ", skippedInputs)}");
                 }
             }
         }
@@ -515,14 +553,42 @@ namespace compute.geometry
             }
         }
 
-        // Geometry contextual inputs are wrapped in a Rhino CommonObject JSON dictionary; rehydrate
-        // to GeometryBase then wrap as IGH_GeometricGoo. Original code did not null-check before
-        // adding to the tree, so we don't either (preserving behavior).
+        // Geometry contextual inputs (Param_Geometry / GetGeometry parameters) arrive in one of
+        // two wire formats depending on the client:
+        //   1. CommonObject dictionary-archive JSON — produced by Hops (which calls
+        //      GH_Convert.ToGeometryBase before sending) and by other clients that wrap
+        //      geometry through CommonObject.ToJSON. Rehydrate via CommonObject.FromJSON.
+        //   2. Flat property-bag JSON — produced by non-Hops clients (compute.rhino3d.py,
+        //      compute.rhino3d.js, custom callers) when serializing Rhino value-type structs
+        //      (Line, Arc, Circle) directly with JsonConvert. These don't derive from
+        //      CommonObject and won't rehydrate via FromJSON; deserialize as the raw struct
+        //      and wrap in the matching curve type so the downstream pipeline sees a
+        //      GeometryBase.
         static IGH_GeometricGoo DeserializeGeometry(ResthopperObject restobj)
         {
-            var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(restobj.Data);
-            var gb = Rhino.Runtime.CommonObject.FromJSON(dict) as GeometryBase;
-            return GH_Convert.ToGeometricGoo(gb);
+            try
+            {
+                var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(restobj.Data);
+                if (dict != null && Rhino.Runtime.CommonObject.FromJSON(dict) is GeometryBase gb)
+                    return GH_Convert.ToGeometricGoo(gb);
+            }
+            catch (JsonException) { /* not a CommonObject archive — fall through to struct path */ }
+
+            if (TryDeserializeStruct<Circle>(restobj.Data, out var circle) && circle.IsValid)
+                return GH_Convert.ToGeometricGoo(new ArcCurve(circle));
+            if (TryDeserializeStruct<Arc>(restobj.Data, out var arc) && arc.IsValid)
+                return GH_Convert.ToGeometricGoo(new ArcCurve(arc));
+            if (TryDeserializeStruct<Line>(restobj.Data, out var line) && line.IsValid)
+                return GH_Convert.ToGeometricGoo(new LineCurve(line));
+
+            return null;
+        }
+
+        static bool TryDeserializeStruct<T>(string data, out T value) where T : struct
+        {
+            try
+            { value = JsonConvert.DeserializeObject<T>(data); return true; }
+            catch (JsonException) { value = default; return false; }
         }
 
         public Schema Solve(int rhinoVersion, SchemaDataFormat format)
@@ -597,37 +663,37 @@ namespace compute.geometry
                     // implicit fall-through to no-op.
                     ResthopperObject resthopperObject = goo switch
                     {
-                        GH_Boolean g           => GetResthopperObject<bool>(g.Value, paramId, rhinoVersion),
-                        GH_Point g             => GetResthopperObject<Point3d>(g.Value, paramId, rhinoVersion),
-                        GH_Vector g            => GetResthopperObject<Vector3d>(g.Value, paramId, rhinoVersion),
-                        GH_Integer g           => GetResthopperObject<int>(g.Value, paramId, rhinoVersion),
-                        GH_Number g            => GetResthopperObject<double>(g.Value, paramId, rhinoVersion),
-                        GH_String g            => GetResthopperObject<string>(g.Value, paramId, rhinoVersion),
-                        GH_SubD g              => GetResthopperObject<SubD>(g.Value, paramId, rhinoVersion),
-                        GH_Line g              => GetResthopperObject<Line>(g.Value, paramId, rhinoVersion),
-                        GH_Curve g             => GetResthopperObject<Curve>(g.Value, paramId, rhinoVersion),
-                        GH_Circle g            => GetResthopperObject<Circle>(g.Value, paramId, rhinoVersion),
-                        GH_Arc g               => GetResthopperObject<Arc>(g.Value, paramId, rhinoVersion),
-                        GH_Plane g             => GetResthopperObject<Plane>(g.Value, paramId, rhinoVersion),
-                        GH_Rectangle g         => GetResthopperObject<Rectangle3d>(g.Value, paramId, rhinoVersion),
-                        GH_Box g               => GetResthopperObject<Box>(g.Value, paramId, rhinoVersion),
-                        GH_Surface g           => GetResthopperObject<Brep>(g.Value, paramId, rhinoVersion),
-                        GH_Brep g              => GetResthopperObject<Brep>(g.Value, paramId, rhinoVersion),
-                        GH_Mesh g              => GetResthopperObject<Mesh>(g.Value, paramId, rhinoVersion),
-                        GH_Extrusion g         => GetResthopperObject<Extrusion>(g.Value, paramId, rhinoVersion),
-                        GH_PointCloud g        => GetResthopperObject<PointCloud>(g.Value, paramId, rhinoVersion),
+                        GH_Boolean g => GetResthopperObject<bool>(g.Value, paramId, rhinoVersion),
+                        GH_Point g => GetResthopperObject<Point3d>(g.Value, paramId, rhinoVersion),
+                        GH_Vector g => GetResthopperObject<Vector3d>(g.Value, paramId, rhinoVersion),
+                        GH_Integer g => GetResthopperObject<int>(g.Value, paramId, rhinoVersion),
+                        GH_Number g => GetResthopperObject<double>(g.Value, paramId, rhinoVersion),
+                        GH_String g => GetResthopperObject<string>(g.Value, paramId, rhinoVersion),
+                        GH_SubD g => GetResthopperObject<SubD>(g.Value, paramId, rhinoVersion),
+                        GH_Line g => GetResthopperObject<Line>(g.Value, paramId, rhinoVersion),
+                        GH_Curve g => GetResthopperObject<Curve>(g.Value, paramId, rhinoVersion),
+                        GH_Circle g => GetResthopperObject<Circle>(g.Value, paramId, rhinoVersion),
+                        GH_Arc g => GetResthopperObject<Arc>(g.Value, paramId, rhinoVersion),
+                        GH_Plane g => GetResthopperObject<Plane>(g.Value, paramId, rhinoVersion),
+                        GH_Rectangle g => GetResthopperObject<Rectangle3d>(g.Value, paramId, rhinoVersion),
+                        GH_Box g => GetResthopperObject<Box>(g.Value, paramId, rhinoVersion),
+                        GH_Surface g => GetResthopperObject<Brep>(g.Value, paramId, rhinoVersion),
+                        GH_Brep g => GetResthopperObject<Brep>(g.Value, paramId, rhinoVersion),
+                        GH_Mesh g => GetResthopperObject<Mesh>(g.Value, paramId, rhinoVersion),
+                        GH_Extrusion g => GetResthopperObject<Extrusion>(g.Value, paramId, rhinoVersion),
+                        GH_PointCloud g => GetResthopperObject<PointCloud>(g.Value, paramId, rhinoVersion),
                         GH_InstanceReference g => GetResthopperObject<InstanceReferenceGeometry>(g.Value, paramId, rhinoVersion),
-                        GH_Hatch g             => GetResthopperObject<Hatch>(g.Value, paramId, rhinoVersion),
-                        GH_LinearDimension g   => GetResthopperObject<LinearDimension>(g.Value, paramId, rhinoVersion),
-                        GH_RadialDimension g   => GetResthopperObject<RadialDimension>(g.Value, paramId, rhinoVersion),
-                        GH_AngularDimension g  => GetResthopperObject<AngularDimension>(g.Value, paramId, rhinoVersion),
+                        GH_Hatch g => GetResthopperObject<Hatch>(g.Value, paramId, rhinoVersion),
+                        GH_LinearDimension g => GetResthopperObject<LinearDimension>(g.Value, paramId, rhinoVersion),
+                        GH_RadialDimension g => GetResthopperObject<RadialDimension>(g.Value, paramId, rhinoVersion),
+                        GH_AngularDimension g => GetResthopperObject<AngularDimension>(g.Value, paramId, rhinoVersion),
                         GH_OrdinateDimension g => GetResthopperObject<OrdinateDimension>(g.Value, paramId, rhinoVersion),
-                        GH_Leader g            => GetResthopperObject<Leader>(g.Value, paramId, rhinoVersion),
-                        GH_TextEntity g        => GetResthopperObject<TextEntity>(g.Value, paramId, rhinoVersion),
-                        GH_TextDot g           => GetResthopperObject<TextDot>(g.Value, paramId, rhinoVersion),
-                        GH_Centermark g        => GetResthopperObject<Centermark>(g.Value, paramId, rhinoVersion),
+                        GH_Leader g => GetResthopperObject<Leader>(g.Value, paramId, rhinoVersion),
+                        GH_TextEntity g => GetResthopperObject<TextEntity>(g.Value, paramId, rhinoVersion),
+                        GH_TextDot g => GetResthopperObject<TextDot>(g.Value, paramId, rhinoVersion),
+                        GH_Centermark g => GetResthopperObject<Centermark>(g.Value, paramId, rhinoVersion),
                         // Selva: serialize GH_Colour output as a Color value.
-                        GH_Colour g            => GetResthopperObject<Color>(g.Value, paramId, rhinoVersion),
+                        GH_Colour g => GetResthopperObject<Color>(g.Value, paramId, rhinoVersion),
 
                         // Selva SDK seam: any Goo implementing ISelvaSerializableGoo (matched by
                         // interface name, not assembly reference) owns its compute JSON. New Selva
@@ -651,7 +717,7 @@ namespace compute.geometry
                                              gooObj.GetType().FullName.IndexOf("UISchemaGoo", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                              gooObj.GetType().FullName.IndexOf("PlotlyFigure", StringComparison.OrdinalIgnoreCase) >= 0)
                             => GetResthopperObject<object>(gooObj.GetType().GetProperty("Value")?.GetValue(gooObj), paramId, rhinoVersion),
-                        _                      => null
+                        _ => null
                     };
                     if (resthopperObject != null)
                         resthopperObjectList.Add(resthopperObject);
@@ -676,12 +742,12 @@ namespace compute.geometry
                 return rhObj;
             }
         }
-        
+
         // ============================================================================
         // Selva SDK seam (reflection-based, no plugin assembly reference)
         // ============================================================================
 
-        
+
         // True when the type (or any implemented interface) is named exactly `interfaceName`. Matched
         // by simple name so every Selva-family plugin can declare its own copy of the contract interface
         // without a shared assembly. See Selva.GH ISelvaOutput / ISelvaSerializableGoo.
@@ -695,7 +761,7 @@ namespace compute.geometry
 
             return false;
         }
-        
+
         // True when a Goo owns its compute wire format (ISelvaSerializableGoo.ToComputeJson()).
         // Unwraps GH_ObjectWrapper: custom Selva goo arrives wrapped on a generic ContextBake input,
         // so the interface check must run against the inner goo, not the wrapper.

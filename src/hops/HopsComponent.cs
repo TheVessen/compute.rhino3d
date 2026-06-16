@@ -78,7 +78,10 @@ namespace Hops
                 return;
             if (Rhino.RhinoApp.IsRunningHeadless)
                 return;
-            if (Hops.HopsAppSettings.Servers.Length > 0)
+            // Only auto-spawn when the user has chosen the local server source. The remote URL
+            // may still be stored in settings (so it persists across radio toggles), so check
+            // the explicit toggle rather than the URL list.
+            if (!Hops.HopsAppSettings.UseLocalServer)
                 return;
             if (Hops.HopsAppSettings.LaunchWorkerAtStart)
             {
@@ -668,8 +671,9 @@ namespace Hops
                         }
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    HopsLog.Log.Debug(ex, "Failed to load function-source menu for {SourcePath}", row.SourcePath);
                 }
             }
             else if (Directory.Exists(row.SourcePath))
@@ -703,7 +707,10 @@ namespace Hops
                     {
                         Instances.DocumentEditor.ScriptAccess_OpenDocument(ti.Name);
                     }
-                    catch (Exception) { }
+                    catch (Exception ex)
+                    {
+                        HopsLog.Log.Debug(ex, "Failed to open document {DocumentName}", ti.Name);
+                    }
                     break;
             }
             
@@ -997,8 +1004,10 @@ for value in values:
             {
                 return JsonConvert.DeserializeObject<string>(data);
             }
-            catch (Exception)
+            catch (Newtonsoft.Json.JsonException)
             {
+                // Intentional fallback: when the data isn't valid JSON-encoded string syntax,
+                // treat it as already-decoded and just unescape any backslash sequences.
                 return System.Text.RegularExpressions.Regex.Unescape(data);
             }
         }
