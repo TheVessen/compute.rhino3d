@@ -391,31 +391,35 @@ namespace compute.geometry
                             ////////////////////////////////////////////////
                             /// Selva Specific Contextual Inputs
                             ////////////////////////////////////////////////
+                            // Color and File arrive as (possibly escaped) JSON strings; DeserializeText
+                            // already does the JsonConvert-with-Regex.Unescape fallback these need.
+                            case "Color":
+                                BuildAndAssignContextualTree(contextualParameter, tree, DeserializeText);
+                                break;
+                            case "File":
+                                BuildAndAssignContextualTree(contextualParameter, tree, DeserializeText);
+                                break;
+                            // ValueList assigns via SetValues (a flat string list), not a contextual
+                            // data tree, so it can't use BuildAndAssignContextualTree.
                             case "ValueList":
                                 {
                                     var stringList = new List<string>();
                                     foreach (KeyValuePair<string, List<ResthopperObject>> entree in tree)
                                     {
-                                        foreach (var restobj in entree.Value)
-                                            stringList.Add(restobj.Data.Trim('"'));
+                                        for (int i = 0; i < entree.Value.Count; i++)
+                                        {
+                                            ResthopperObject restobj = entree.Value[i];
+                                            string data;
+                                            try
+                                            { data = JsonConvert.DeserializeObject<string>(restobj.Data) ?? restobj.Data.Trim('"'); }
+                                            catch { data = restobj.Data.Trim('"'); }
+                                            stringList.Add(data);
+                                        }
                                     }
-
-                                    // Set contextual data - pass the values as-is; the parameter
-                                    // maps them internally. Uses the single-arg AssignContextualData
-                                    // (not the tree variant), then clears and expires.
                                     contextualParameter.GetType()
-                                        .GetMethod("AssignContextualData")?
+                                        .GetMethod("SetValues")?
                                         .Invoke(contextualParameter, new object[] { stringList });
-
-                                    inputGroup.Param.VolatileData.Clear();
-                                    inputGroup.Param.ExpireSolution(false);
                                 }
-                                break;
-                            case "File":
-                                BuildAndAssignContextualTree(contextualParameter, tree, DeserializeText);
-                                break;
-                            case "Color":
-                                BuildAndAssignContextualTree(contextualParameter, tree, DeserializeText);
                                 break;
                         }
                         continue;
@@ -877,8 +881,11 @@ namespace compute.geometry
                     Default = i.Value.GetDefault(),
                     Minimum = i.Value.GetMinimum(),
                     Maximum = i.Value.GetMaximum(),
-                    //SELVA -> provide a instance Guid for param consitency 
-                    Id = i.Value.Param.InstanceGuid.ToString()
+                    //SELVA -> provide a instance Guid for param consitency
+                    Id = i.Value.Param.InstanceGuid.ToString(),
+                    // VEKTORNODE: IO-HANDLERS — hierarchical group name + enumerated values.
+                    GroupName = i.Value.GetGroupName(),
+                    Values = i.Value.GetValues(),
                 };
                 if (singularComponent != null)
                 {
@@ -1135,6 +1142,129 @@ namespace compute.geometry
                     return (double)paramSlider.Slider.Maximum;
 
                 return null;
+            }
+
+            /// <summary>
+            /// Gets the full hierarchical group name for the parameter (e.g., "Layer_1::Layer_2::Layer_3")
+            /// </summary>
+            /// <returns>
+            /// The group name as a string, or null if not found.
+            /// </returns>
+            public string GetGroupName()
+            {
+                var document = Param.OnPingDocument();
+                if (document == null)
+                    return null;
+
+                var allGroups = document.Objects.OfType<GH_Group>().ToList();
+
+                // Find all groups that contain this parameter (directly or through nested groups)
+                var allGroupsContainingParam = allGroups
+                    .Where(g => !string.IsNullOrEmpty(g.NickName) &&
+                                GroupContainsParameterRecursively(g, Param.InstanceGuid, allGroups))
+                    .ToList();
+
+                if (!allGroupsContainingParam.Any())
+                    return null;
+
+                if (allGroupsContainingParam.Count == 1)
+                    return allGroupsContainingParam.First().NickName;
+
+                // Build hierarchy by finding parent-child relationships
+                var hierarchy = BuildGroupHierarchy(allGroupsContainingParam);
+
+                return string.Join("::", hierarchy.Select(g => g.NickName));
+            }
+
+            public Dictionary<string, string> GetValues()
+            {
+                if (Param is IGH_ContextualParameter contextualParam)
+                {
+                    var pType = contextualParam.GetType();
+                    var props = pType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                    var valuesInfo = props.FirstOrDefault(x => x.Name == "Values");
+                    if (valuesInfo != null)
+                    {
+                        var val = valuesInfo.GetValue(contextualParam, null);
+                        if (val is Dictionary<string, string> dict)
+                            return dict;
+                    }
+                }
+
+                return null;
+            }
+
+            /// <summary>
+            /// Recursively checks if a group contains a parameter (directly or through nested child groups)
+            /// </summary>
+            private bool GroupContainsParameterRecursively(GH_Group group, Guid paramGuid, List<GH_Group> allGroups)
+            {
+                // Check if parameter is directly in this group
+                if (group.Objects().Any(obj => obj.InstanceGuid == paramGuid))
+                    return true;
+
+                // Check if any child groups contain the parameter
+                var childGroups = allGroups
+                    .Where(g => g.InstanceGuid != group.InstanceGuid &&
+                                group.Objects().Any(obj => obj.InstanceGuid == g.InstanceGuid))
+                    .ToList();
+
+                foreach (var childGroup in childGroups)
+                {
+                    if (GroupContainsParameterRecursively(childGroup, paramGuid, allGroups))
+                        return true;
+                }
+
+                return false;
+            }
+
+            private List<GH_Group> BuildGroupHierarchy(List<GH_Group> groups)
+            {
+                var hierarchy = new List<GH_Group>();
+                var remaining = new List<GH_Group>(groups);
+
+                // Start with groups that are not contained in any other group (root groups)
+                while (remaining.Any())
+                {
+                    var rootGroup = remaining.FirstOrDefault(g =>
+                        !remaining.Any(other => other != g && GroupContainsGroup(other, g)));
+
+                    if (rootGroup == null)
+                    {
+                        // Fallback: if we can't determine hierarchy, just return the first group
+                        hierarchy.AddRange(remaining);
+                        break;
+                    }
+
+                    hierarchy.Add(rootGroup);
+                    remaining.Remove(rootGroup);
+
+                    // Now find the next level - groups that are directly contained in the rootGroup
+                    var childGroups = remaining.Where(g => GroupContainsGroup(rootGroup, g)).ToList();
+
+                    // If there are child groups, continue with the most nested one
+                    if (childGroups.Any())
+                    {
+                        // Remove child groups from remaining as we'll process them next
+                        foreach (var child in childGroups)
+                            remaining.Remove(child);
+
+                        // Continue with child groups (recursive approach)
+                        var childHierarchy = BuildGroupHierarchy(childGroups);
+                        hierarchy.AddRange(childHierarchy);
+                        break; // We've found our path
+                    }
+                }
+
+                var filteredHierarchy = hierarchy.Where(g => !g.NickName.Contains("RH_IN")).ToList();
+
+                return filteredHierarchy;
+            }
+
+            private bool GroupContainsGroup(GH_Group parentGroup, GH_Group childGroup)
+            {
+                // Check if parentGroup contains childGroup as one of its objects
+                return parentGroup.Objects().Any(obj => obj.InstanceGuid == childGroup.InstanceGuid);
             }
 
             public bool AlreadySet(Resthopper.IO.DataTree<ResthopperObject> tree)

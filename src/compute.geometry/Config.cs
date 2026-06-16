@@ -107,7 +107,8 @@ namespace compute.geometry
             CachePhysicalLimitPercent = GetEnvironmentVariable<int>(RHINO_COMPUTE_CACHE_PHYSICAL_LIMIT_PERCENT, 70);
             LogPath = GetEnvironmentVariable(RHINO_COMPUTE_LOG_PATH, Path.Combine(Path.GetTempPath(), "Compute", "Logs"), COMPUTE_LOG_PATH);
             LogRetainDays = GetEnvironmentVariable(RHINO_COMPUTE_LOG_RETAIN_DAYS, 10, COMPUTE_LOG_RETAIN_DAYS);
-            CreateHeadlessDoc = GetEnvironmentVariable<bool>(RHINO_COMPUTE_CREATE_HEADLESS_DOC, false);
+            // VEKTORNODE: SELVA — default headless doc creation ON (upstream default is false).
+            CreateHeadlessDoc = GetEnvironmentVariable<bool>(RHINO_COMPUTE_CREATE_HEADLESS_DOC, true);
             LoadGrasshopper = GetEnvironmentVariable<bool>(RHINO_COMPUTE_LOAD_GRASSHOPPER, true);
 
 #if DEBUG

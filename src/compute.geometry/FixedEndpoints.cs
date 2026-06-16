@@ -25,6 +25,7 @@ namespace compute.geometry
             app.MapGet("plugins/rhino/installed", GetInstalledPluginsRhino);
             app.MapGet("plugins/gh/installed", GetInstalledPluginsGrasshopper);
             app.MapPost("grasshopper/schema", GetGrasshopperSchema);
+            app.MapPost("grasshopper/schema/url", GetGrasshopperSchemaFromUrl);
             app.MapPost("cache/purge", PurgeCache);
             app.MapPost("shutdown", ShutdownChild);
         }
@@ -155,65 +156,7 @@ namespace compute.geometry
                     stream.CopyTo(mem);
 
                     var archive = GrasshopperValidationHelper.ArchiveFromBytes(mem.ToArray());
-                    if (archive == null)
-                    {
-                        Log.Warning("grasshopper/schema: failed to load archive for file={FileName}", fileName);
-                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.")); continue;
-                    }
-
-                    var doc = GrasshopperValidationHelper.DocumentFromArchive(archive);
-                    if (doc == null)
-                    {
-                        Log.Warning("grasshopper/schema: failed to extract document from archive for file={FileName}", fileName);
-                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.")); continue;
-                    }
-
-                    Log.Information("grasshopper/schema: document loaded, objectCount={Count}", doc.ObjectCount);
-                    var allTypes = string.Join(", ", doc.Objects.Select(o => o.GetType().Name).Distinct().OrderBy(n => n));
-                    Log.Information("grasshopper/schema: component types in document: {Types}", allTypes);
-
-                    var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
-                    Log.Information("grasshopper/schema: found {Count} schema Context Bake component(s) in file={FileName}", schemaComponents.Count, fileName);
-
-                    if (schemaComponents.Count == 0)
-                    {
-                        results.Add(GrasshopperValidationHelper.ErrorResult(fileName,
-                            "This definition has no outputs defined. " +
-                            "Add a 'Context Bake' component, connect a 'UI Builder' component to its first input, " +
-                            "and make sure the Schema output param is named 'Schema'."));
-                        continue;
-                    }
-
-                    var schemas = new JArray();
-                    string error = null;
-
-                    foreach (var component in schemaComponents)
-                    {
-                        var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
-                        Log.Debug("grasshopper/schema: schema parent component type={Type}", parent?.GetType().Name ?? "null");
-
-                        if (parent?.GetType().Name != "GH_UIBuilderComponent")
-                        {
-                            error = "The 'Schema' source is not coming from a 'UI Builder' component.";
-                            Log.Warning("grasshopper/schema: {Error} (got {Type})", error, parent?.GetType().Name ?? "null");
-                            break;
-                        }
-
-                        var schema = GrasshopperValidationHelper.GetEmbeddedSchema(parent);
-                        if (schema == null)
-                        {
-                            error = "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.";
-                            Log.Warning("grasshopper/schema: {Error}", error);
-                            break;
-                        }
-
-                        Log.Debug("grasshopper/schema: extracted schema successfully from file={FileName}", fileName);
-                        schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
-                    }
-
-                    results.Add(error != null
-                        ? GrasshopperValidationHelper.ErrorResult(fileName, error)
-                        : GrasshopperValidationHelper.SuccessResult(fileName, schemas));
+                    results.Add(ExtractSchemaFromArchive(fileName, archive));
                 }
                 catch (Exception ex)
                 {
@@ -224,6 +167,118 @@ namespace compute.geometry
 
             ctx.Response.ContentType = "application/json";
             await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(results));
+        }
+
+        // VEKTORNODE: SELVA — fetch .gh/.ghx from URL(s) (or local path) and extract embedded schema.
+        // application/json body: { "urls": ["https://…/file.gh"] } or { "url": "https://…/file.gh" }.
+        static async Task GetGrasshopperSchemaFromUrl(HttpContext ctx)
+        {
+            string body;
+            using (var reader = new StreamReader(ctx.Request.Body))
+                body = await reader.ReadToEndAsync();
+
+            JObject json;
+            try { json = JObject.Parse(body); }
+            catch { json = null; }
+
+            if (json == null)
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Invalid JSON body." }));
+                return;
+            }
+
+            var urls = new List<string>();
+            if (json["urls"] is JArray arr)
+                urls.AddRange(arr.Values<string>().Where(u => !string.IsNullOrWhiteSpace(u)));
+            else if (json["url"] is JValue single && single.Type == JTokenType.String)
+                urls.Add(single.Value<string>());
+
+            if (urls.Count == 0)
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(new { error = "Provide 'url' or 'urls' in the JSON body." }));
+                return;
+            }
+
+            var results = new List<JObject>();
+            foreach (var url in urls)
+            {
+                try
+                {
+                    var archive = await GrasshopperValidationHelper.ArchiveFromUrlAsync(url);
+                    results.Add(ExtractSchemaFromArchive(url, archive));
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "grasshopper/schema/url: exception processing url={Url}", url);
+                    results.Add(GrasshopperValidationHelper.ErrorResult(url, ex.Message));
+                }
+            }
+
+            ctx.Response.ContentType = "application/json";
+            await ctx.Response.WriteAsync(Newtonsoft.Json.JsonConvert.SerializeObject(results));
+        }
+
+        // Shared schema extraction for both the file-upload and URL endpoints.
+        static JObject ExtractSchemaFromArchive(string fileName, GH_Archive archive)
+        {
+            if (archive == null)
+            {
+                Log.Warning("grasshopper/schema: failed to load archive for file={FileName}", fileName);
+                return GrasshopperValidationHelper.ErrorResult(fileName, "Failed to load the Grasshopper document.");
+            }
+
+            var doc = GrasshopperValidationHelper.DocumentFromArchive(archive);
+            if (doc == null)
+            {
+                Log.Warning("grasshopper/schema: failed to extract document from archive for file={FileName}", fileName);
+                return GrasshopperValidationHelper.ErrorResult(fileName, "Failed to extract definition from archive.");
+            }
+
+            Log.Information("grasshopper/schema: document loaded, objectCount={Count}", doc.ObjectCount);
+            var allTypes = string.Join(", ", doc.Objects.Select(o => o.GetType().Name).Distinct().OrderBy(n => n));
+            Log.Information("grasshopper/schema: component types in document: {Types}", allTypes);
+
+            var schemaComponents = GrasshopperValidationHelper.GetSchemaContextBakeComponents(doc);
+            Log.Information("grasshopper/schema: found {Count} schema Context Bake component(s) in file={FileName}", schemaComponents.Count, fileName);
+
+            if (schemaComponents.Count == 0)
+            {
+                return GrasshopperValidationHelper.ErrorResult(fileName,
+                    "This definition has no outputs defined. " +
+                    "Add a 'Context Bake' component, connect a 'UI Builder' component to its first input, " +
+                    "and make sure the Schema output param is named 'Schema'.");
+            }
+
+            var schemas = new JArray();
+            foreach (var component in schemaComponents)
+            {
+                var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
+                Log.Debug("grasshopper/schema: schema parent component type={Type}", parent?.GetType().Name ?? "null");
+
+                if (parent?.GetType().Name != "GH_UIBuilderComponent")
+                {
+                    var error = "The 'Schema' source is not coming from a 'UI Builder' component.";
+                    Log.Warning("grasshopper/schema: {Error} (got {Type})", error, parent?.GetType().Name ?? "null");
+                    return GrasshopperValidationHelper.ErrorResult(fileName, error);
+                }
+
+                var schema = GrasshopperValidationHelper.GetEmbeddedSchema(parent);
+                if (schema == null)
+                {
+                    var error = "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.";
+                    Log.Warning("grasshopper/schema: {Error}", error);
+                    return GrasshopperValidationHelper.ErrorResult(fileName, error);
+                }
+
+                Log.Debug("grasshopper/schema: extracted schema successfully from file={FileName}", fileName);
+                schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
+            }
+
+            return GrasshopperValidationHelper.SuccessResult(fileName, schemas);
         }
     }
 }
