@@ -116,6 +116,14 @@ gcloud auth application-default login
   ```bash
   sudo journalctl -u rhino-compute -f
   ```
+- **Update .NET SDK (only if the build fails with `NETSDK1045` targeting a newer .NET):**
+  ```bash
+  cd ~
+  curl -SL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh
+  chmod +x dotnet-install.sh
+  sudo ./dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet
+  /usr/share/dotnet/dotnet --list-sdks
+  ```
 - **Update code (and plugins):**
   ```bash
   sudo systemctl stop rhino-compute

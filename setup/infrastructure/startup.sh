@@ -18,13 +18,13 @@ apt update
 apt install -y wget gpg nano git curl ca-certificates
 
 # ============================================================
-# 2. Install .NET 9 SDK
+# 2. Install .NET 10 SDK
 # ============================================================
-echo ">>> Installing .NET 9..."
+echo ">>> Installing .NET 10..."
 wget https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh \
   -O /tmp/dotnet-install.sh
 chmod +x /tmp/dotnet-install.sh
-/tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/share/dotnet
+/tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet
 rm /tmp/dotnet-install.sh
 
 # Make dotnet available system-wide
