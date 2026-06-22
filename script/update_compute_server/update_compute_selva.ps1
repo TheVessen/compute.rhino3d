@@ -307,8 +307,12 @@ function Invoke-Rollback {
                     & cmd /c rd /s /q $rhinoComputePath 2>&1 | Out-Null
                 }
             }
+            # COPY (not move) from backup so a failed/partial restore still
+            # leaves the backup intact for a retry or manual recovery. Moving
+            # consumes the backup — if the move then dies mid-way you end up
+            # with an empty deploy AND no backup.
             Invoke-WithRetry -Description "Restore rhino.compute from backup" -Action {
-                Move-DirectoryRobust -Source "$backupDir\rhino.compute" -Destination $rhinoComputePath
+                Copy-DirectoryRobust -Source "$backupDir\rhino.compute" -Destination $rhinoComputePath
             }
             Write-Log "Restored rhino.compute" -Level "SUCCESS"
         }
@@ -319,8 +323,9 @@ function Invoke-Rollback {
                     & cmd /c rd /s /q $computeGeometryPath 2>&1 | Out-Null
                 }
             }
+            # COPY (not move) — see note above on rhino.compute restore.
             Invoke-WithRetry -Description "Restore compute.geometry from backup" -Action {
-                Move-DirectoryRobust -Source "$backupDir\compute.geometry" -Destination $computeGeometryPath
+                Copy-DirectoryRobust -Source "$backupDir\compute.geometry" -Destination $computeGeometryPath
             }
             Write-Log "Restored compute.geometry" -Level "SUCCESS"
         }
@@ -329,6 +334,115 @@ function Invoke-Rollback {
         Write-Log "Rollback failed: $_" -Level "ERROR"
         Write-Log "Manual intervention required. Backup is at: $backupDir" -Level "ERROR"
     }
+}
+
+# ============================================================
+# Is a deployment present and intact?
+# A folder that is missing, empty, or missing its executable
+# all count as "not present" — that is the state we recover
+# from.
+# ============================================================
+function Test-DeploymentPresent {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Exe
+    )
+    return (Test-Path $Path) -and (Test-Path $Exe)
+}
+
+# ============================================================
+# Find the newest prior backup that actually contains a usable
+# copy of the requested service ($Leaf = 'rhino.compute' or
+# 'compute.geometry'). Backups are named with a baked-in
+# timestamp, so sorting by Name descending gives newest first.
+# Returns the full path to the backed-up service folder, or
+# $null if none qualifies. Skips $backupDir (this run's own,
+# still-empty backup folder).
+# ============================================================
+function Find-LatestUsableBackup {
+    param(
+        [Parameter(Mandatory)][string]$Leaf,   # rhino.compute | compute.geometry
+        [Parameter(Mandatory)][string]$ExeName # rhino.compute.exe | compute.geometry.exe
+    )
+    if (-not (Test-Path $backupRoot)) { return $null }
+
+    $candidates = Get-ChildItem -Path $backupRoot -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -like "rhino.compute-backup-*" -and $_.FullName -ne $backupDir } |
+                  Sort-Object Name -Descending
+
+    foreach ($c in $candidates) {
+        $svcPath = Join-Path $c.FullName $Leaf
+        $exePath = Join-Path $svcPath $ExeName
+        if ((Test-Path $svcPath) -and (Test-Path $exePath)) {
+            return $svcPath
+        }
+    }
+    return $null
+}
+
+# ============================================================
+# Disaster recovery — restore missing/empty live deployments
+# from the most recent usable prior backup. Called from
+# pre-flight when a deployment folder is gone (e.g. a previous
+# run died mid-deploy and left the web root empty).
+#
+# Non-destructive: copies from the backup (never moves), so the
+# backup survives a partial/failed restore. Returns $true if,
+# after the attempt, BOTH deployments are present and intact;
+# $false otherwise.
+# ============================================================
+function Invoke-DisasterRecovery {
+    Write-Step "Disaster recovery — restoring missing deployment(s) from backup"
+
+    $targets = @(
+        @{ Leaf = "rhino.compute";    ExeName = "rhino.compute.exe";    Path = $rhinoComputePath;    Exe = $rhinoComputeExe    },
+        @{ Leaf = "compute.geometry"; ExeName = "compute.geometry.exe"; Path = $computeGeometryPath; Exe = $computeGeometryExe }
+    )
+
+    foreach ($t in $targets) {
+        if (Test-DeploymentPresent -Path $t.Path -Exe $t.Exe) {
+            Write-Log "'$($t.Leaf)' is already present — skipping recovery for it."
+            continue
+        }
+
+        Write-Log "'$($t.Leaf)' is missing or empty — searching for a usable backup..." -Level "WARN"
+        $src = Find-LatestUsableBackup -Leaf $t.Leaf -ExeName $t.ExeName
+        if (-not $src) {
+            Write-Log "No usable backup found for '$($t.Leaf)' under $backupRoot." -Level "ERROR"
+            continue
+        }
+
+        Write-Log "Recovering '$($t.Leaf)' from: $src" -Level "WARN"
+        try {
+            # Clear any partial/empty live folder first so /MIR mirrors cleanly.
+            if (Test-Path $t.Path) {
+                Grant-FullControl -Path $t.Path
+                & cmd /c rd /s /q $t.Path 2>&1 | Out-Null
+            }
+            Invoke-WithRetry -Description "Recover $($t.Leaf) from backup" -Action {
+                Copy-DirectoryRobust -Source $src -Destination $t.Path
+            }
+            if (Test-DeploymentPresent -Path $t.Path -Exe $t.Exe) {
+                Write-Log "Recovered '$($t.Leaf)' successfully." -Level "SUCCESS"
+            }
+            else {
+                Write-Log "Recovery of '$($t.Leaf)' completed but executable still missing." -Level "ERROR"
+            }
+        }
+        catch {
+            Write-Log "Recovery of '$($t.Leaf)' failed: $_" -Level "ERROR"
+        }
+    }
+
+    $ok = (Test-DeploymentPresent -Path $rhinoComputePath -Exe $rhinoComputeExe) -and
+          (Test-DeploymentPresent -Path $computeGeometryPath -Exe $computeGeometryExe)
+    if ($ok) {
+        Write-Log "Disaster recovery complete — both deployments present." -Level "SUCCESS"
+    }
+    else {
+        Write-Log "Disaster recovery could not restore all deployments." -Level "ERROR"
+    }
+    return $ok
 }
 
 # ============================================================
@@ -533,13 +647,23 @@ try {
     }
     Import-Module WebAdministration -ErrorAction Stop
 
-    if (-not (Test-Path $computeGeometryExe)) {
-        throw "compute.geometry executable not found at: $computeGeometryExe. Run the bootstrap script first."
+    $rhinoPresent    = Test-DeploymentPresent -Path $rhinoComputePath    -Exe $rhinoComputeExe
+    $geometryPresent = Test-DeploymentPresent -Path $computeGeometryPath -Exe $computeGeometryExe
+
+    if (-not $rhinoPresent -or -not $geometryPresent) {
+        Write-Log "One or both deployments are missing or empty — a previous run may have died mid-deploy." -Level "WARN"
+        Write-Log "  rhino.compute present:    $rhinoPresent" -Level "WARN"
+        Write-Log "  compute.geometry present: $geometryPresent" -Level "WARN"
+
+        $recovered = Invoke-DisasterRecovery
+        if (-not $recovered) {
+            throw "Deployment folders are missing/empty and could not be recovered from any backup under $backupRoot. Run the bootstrap script to reinstall from scratch."
+        }
+        Write-Log "Recovery succeeded — continuing with the update." -Level "SUCCESS"
     }
-    if (-not (Test-Path $rhinoComputeExe)) {
-        throw "rhino.compute executable not found at: $rhinoComputeExe. Run the bootstrap script first."
+    else {
+        Write-Log "Both executables found." -Level "SUCCESS"
     }
-    Write-Log "Both executables found." -Level "SUCCESS"
 
     # Check disk space (need at least 500 MB free on target drive)
     $drive = (Split-Path $physicalPathRoot -Qualifier)
@@ -698,14 +822,20 @@ try {
     New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
     Write-Log "Backup directory created: $backupDir"
 
-    Invoke-WithRetry -Description "Move rhino.compute to backup" -Action {
-        Write-Log "Moving $rhinoComputePath -> $backupDir\rhino.compute"
-        Move-DirectoryRobust -Source $rhinoComputePath -Destination "$backupDir\rhino.compute"
+    # COPY (not move) the live install into the backup. The live folders stay
+    # in place so there is never a moment with zero copies on disk: if anything
+    # below fails, the original deploy is still intact and the backup is a
+    # full, independent copy. Section 6 then mirrors staging over the live
+    # folders with robocopy /MIR, which reconciles cleanly against existing
+    # content.
+    Invoke-WithRetry -Description "Copy rhino.compute to backup" -Action {
+        Write-Log "Copying $rhinoComputePath -> $backupDir\rhino.compute"
+        Copy-DirectoryRobust -Source $rhinoComputePath -Destination "$backupDir\rhino.compute"
     }
 
-    Invoke-WithRetry -Description "Move compute.geometry to backup" -Action {
-        Write-Log "Moving $computeGeometryPath -> $backupDir\compute.geometry"
-        Move-DirectoryRobust -Source $computeGeometryPath -Destination "$backupDir\compute.geometry"
+    Invoke-WithRetry -Description "Copy compute.geometry to backup" -Action {
+        Write-Log "Copying $computeGeometryPath -> $backupDir\compute.geometry"
+        Copy-DirectoryRobust -Source $computeGeometryPath -Destination "$backupDir\compute.geometry"
     }
 
     Write-Log "Backup complete." -Level "SUCCESS"
