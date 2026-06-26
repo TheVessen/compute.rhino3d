@@ -18,6 +18,21 @@ using Rhino;
 
 namespace compute.geometry
 {
+    // ============================================================================
+    // VektorNode change
+    // ============================================================================
+    // Distinguishes a stale-pointer cache miss (the client referenced a definition
+    // by its server cache key, but the server no longer holds it — evicted, GC'd,
+    // restarted, or a different child in the pool) from a genuine load failure
+    // (corrupt/unparseable algo bytes). The exception handler (Startup.cs) tags the
+    // response with code "definition_not_cached" so the client can transparently
+    // re-upload the full definition instead of surfacing a hard error.
+    public sealed class DefinitionNotCachedException : Exception
+    {
+        public DefinitionNotCachedException(string pointer)
+            : base($"Definition not cached for pointer '{pointer}'") { }
+    }
+
     public static class ResthopperEndpointsModule
     {
         public static void MapEndpoints(IEndpointRouteBuilder app)
@@ -61,6 +76,44 @@ namespace compute.geometry
 
         static object ghSolveLock = new object();
 
+        // VEKTORNODE: detect whether a cached solve-result JSON came from an errored
+        // solve, so a cache hit can mirror the live path's 500 status. Parses only the
+        // top-level "errors" array via a streaming reader — avoids deserializing the
+        // (potentially multi-MB) geometry payload. Any parse trouble → treat as no
+        // errors (caller falls back to 200), never throws.
+        static bool CachedResultHasErrors(string cachedJson)
+        {
+            if (string.IsNullOrEmpty(cachedJson))
+                return false;
+            try
+            {
+                using (var reader = new JsonTextReader(new System.IO.StringReader(cachedJson)))
+                {
+                    while (reader.Read())
+                    {
+                        if (reader.TokenType == JsonToken.PropertyName
+                            && string.Equals((string)reader.Value, "errors", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Move to the value; a non-empty array means the solve errored.
+                            if (!reader.Read() || reader.TokenType != JsonToken.StartArray)
+                                return false;
+                            while (reader.Read())
+                            {
+                                if (reader.TokenType == JsonToken.EndArray)
+                                    return false; // empty array → no errors
+                                return true; // first element seen → has errors
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug(ex, "CachedResultHasErrors: failed to inspect cached JSON; assuming no errors");
+            }
+            return false;
+        }
+
         static string GrasshopperSolveHelper(Schema input, string body, System.Diagnostics.Stopwatch stopwatch, HttpContext ctx)
         {
             string httpType = ctx.Request.IsHttps ? "HTTPS" : "HTTP";
@@ -77,6 +130,16 @@ namespace compute.geometry
             }
             if (definition == null)
             {
+                // VektorNode change: a pointer was supplied but didn't resolve, and
+                // there's no algo to fall back on → the client's cache key is stale.
+                // Throw a typed exception so the handler can signal a recoverable
+                // miss (client re-uploads) rather than a hard failure.
+                if (!string.IsNullOrWhiteSpace(input.Pointer) && string.IsNullOrWhiteSpace(input.Algo))
+                {
+                    Serilog.Log.Warning("Definition not cached for pointer {Pointer}", input.Pointer);
+                    throw new DefinitionNotCachedException(input.Pointer);
+                }
+
                 var msg = "Unable to load grasshopper definition";
                 Serilog.Log.Warning(msg);
                 throw new Exception(msg);
@@ -116,13 +179,19 @@ namespace compute.geometry
             ctx.Response.Headers.Append("Server-Timing", $"decode;dur={decodeTime}, solve;dur={solveTime}, encode;dur={encodeTime}");
             if (definition.HasErrors)
                 ctx.Response.StatusCode = 500; // internal server error
-            else
+
+            // Cache the completed solve when requested. An errored solve is normally
+            // NOT cached (an error usually means a bad result), but VEKTORNODE:
+            // CacheErroredSolves lets the author opt in for definitions that throw GH
+            // errors by design while still producing correct geometry. The HTTP status
+            // is unchanged either way — only the cache write is gated here.
+            if (input.CacheSolve && (!definition.HasErrors || input.CacheErroredSolves))
             {
-                if (input.CacheSolve)
-                {
-                    Serilog.Log.Debug("Caching solve results");
-                    DataCache.SetCachedSolveResults(body, returnJson, definition);
-                }
+                Serilog.Log.Debug(
+                    definition.HasErrors
+                        ? "Caching solve results (errored solve, CacheErroredSolves opt-in)"
+                        : "Caching solve results");
+                DataCache.SetCachedSolveResults(body, returnJson, definition);
             }
 
             // Dispose headless doc
@@ -147,6 +216,14 @@ namespace compute.geometry
                 if (!string.IsNullOrWhiteSpace(cachedReturnJson))
                 {
                     ctx.Response.ContentType = "application/json";
+                    // VEKTORNODE: a cached result may be from an errored-but-completed
+                    // solve (CacheErroredSolves). The live solve path returns 500 for an
+                    // errored solve, so a cache HIT must return the SAME status — otherwise
+                    // the same request yields 200 on a hit and 500 on a miss, and clients
+                    // that branch on status see inconsistent behavior. The cached body
+                    // carries a non-empty "errors" array exactly when the solve errored.
+                    if (CachedResultHasErrors(cachedReturnJson))
+                        ctx.Response.StatusCode = 500;
                     await ctx.Response.WriteAsync(cachedReturnJson);
                     return;
                 }

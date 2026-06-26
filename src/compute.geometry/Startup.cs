@@ -64,9 +64,16 @@ namespace compute.geometry
                     .Select(l => l.TrimStart())
                     .ToArray() ?? Array.Empty<string>();
 
+                // VektorNode change: a stable, machine-readable error code, emitted in
+                // BOTH debug and production. The human `message` is scrubbed in prod, so
+                // the code is the only reliable signal the client can classify on. A
+                // stale-pointer cache miss surfaces as "definition_not_cached", which the
+                // @selvajs/compute client uses to transparently re-upload the definition.
+                string code = ex is DefinitionNotCachedException ? "definition_not_cached" : null;
+
                 object body = Config.Debug
-                    ? new { error = "Internal Server Error", message, stackTrace = stack }
-                    : new { error = "Internal Server Error", message = "An unexpected error occurred. Check server logs for details." };
+                    ? new { error = "Internal Server Error", message, code, stackTrace = stack }
+                    : new { error = "Internal Server Error", message = "An unexpected error occurred. Check server logs for details.", code };
                 await ctx.Response.WriteAsync(JsonConvert.SerializeObject(body));
             }));
 
