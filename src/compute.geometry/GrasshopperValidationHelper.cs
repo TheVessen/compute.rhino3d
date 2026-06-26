@@ -11,6 +11,9 @@ using Newtonsoft.Json.Linq;
 
 namespace compute.geometry
 {
+    // VEKTORNODE: SELVA — entire file. Supports the grasshopper/schema endpoints
+    // (FixedEndpoints.cs) that extract embedded UI Builder schemas from Selva definitions.
+    // Not present in upstream.
     internal static class GrasshopperValidationHelper
     {
         static readonly HttpClient _http = new HttpClient();

@@ -316,7 +316,13 @@ namespace rhino.compute
                 if (initialRequest.Headers.TryGetValue(API_KEY_HEADER, out var keyHeader))
                     req.Headers.Add(API_KEY_HEADER, keyHeader.ToString());
 
-                // Stream the request body directly to the child process rather than
+                // ── BEGIN VEKTORNODE: SELVA FIX ────────────────────────────────────────────
+                // FIX: grasshopper/validate (and any multipart upload) was broken behind IIS.
+                // The original upstream code read every POST body as a plain string and re-sent
+                // it as application/json, destroying the multipart boundary so compute.geometry
+                // saw no form files. Here the body is streamed through as-is and the original
+                // Content-Type / Content-Length are preserved, so multipart uploads forward
+                // intact. Stream the request body directly to the child process rather than
                 // buffering it as a string, avoiding a full in-memory copy of the payload.
                 var streamContent = new StreamContent(initialRequest.BodyReader.AsStream(leaveOpen: false));
                 if (!string.IsNullOrWhiteSpace(initialRequest.ContentType) &&
@@ -329,6 +335,7 @@ namespace rhino.compute
                 if (initialRequest.ContentLength.HasValue)
                     streamContent.Headers.ContentLength = initialRequest.ContentLength.Value;
                 req.Content = streamContent;
+                // ── END VEKTORNODE: SELVA FIX ──────────────────────────────────────────────
                 // SendAsync fully consumes the request body before returning, so disposing
                 // req (and its owned StreamContent) here is safe.
                 return await client.SendAsync(req);
