@@ -108,6 +108,10 @@ namespace rhino.compute
             // the catch-all proxy route below so they're not forwarded to a compute.geometry child.
             app.MapPost("/shutdown-children", ShutdownChildrenEndpoint);
             app.MapPost("/recycle-children",  RecycleChildrenEndpoint);
+            // Called by a child right before it self-exits on idle timeout, so the parent drops
+            // it from the round-robin pool immediately instead of handing out the dead port on the
+            // next request (the cause of the post-idle "connection refused" bursts).
+            app.MapPost("/child-exiting",     ChildExitingEndpoint);
             app.MapPost("/launch-children",   LaunchChildrenEndpoint);
             app.MapPost("/launch-child",      LaunchChildEndpoint);
 
@@ -167,6 +171,22 @@ namespace rhino.compute
                 shutdown,
                 active = ComputeChildren.CurrentChildCount,
             });
+        }
+
+        // POST /child-exiting?port=N — a child announcing it is about to exit on its own (idle
+        // timeout). Evict it from the pool now so the next request doesn't get routed to a port
+        // that is about to stop listening. Fire-and-forget from the child's perspective; we just
+        // ack. Does not respawn — the normal auto-fill on the next request restores SpawnCount.
+        static async Task ChildExitingEndpoint(HttpRequest req, HttpResponse res)
+        {
+            if (!TryParsePortFilter(req, out int? port, out string parseError) || !port.HasValue)
+            {
+                res.StatusCode = 400;
+                await res.WriteAsJsonAsync(new { error = parseError ?? "port query parameter is required." });
+                return;
+            }
+            ComputeChildren.EvictChild(port.Value, kill: false);
+            await res.WriteAsJsonAsync(new { evicted = port.Value, active = ComputeChildren.CurrentChildCount });
         }
 
         // POST /recycle-children — shut down + respawn. No params = all; ?port=N = just that one.
@@ -302,7 +322,7 @@ namespace rhino.compute
             }
         }
 
-        static async Task<HttpResponseMessage> SendProxyRequest(HttpRequest initialRequest, HttpMethod method, string baseurl)
+        static async Task<HttpResponseMessage> SendProxyRequest(HttpRequest initialRequest, HttpMethod method, string baseurl, string bufferedPostBody = null)
         {
             string proxyUrl = $"{baseurl}{initialRequest.Path}{initialRequest.QueryString}";
 
@@ -324,20 +344,37 @@ namespace rhino.compute
                 // Content-Type / Content-Length are preserved, so multipart uploads forward
                 // intact. Stream the request body directly to the child process rather than
                 // buffering it as a string, avoiding a full in-memory copy of the payload.
-                var streamContent = new StreamContent(initialRequest.BodyReader.AsStream(leaveOpen: false));
-                if (!string.IsNullOrWhiteSpace(initialRequest.ContentType) &&
-                    System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(initialRequest.ContentType, out var parsedContentType))
-                    streamContent.Headers.ContentType = parsedContentType;
+                //
+                // When the handler pre-buffered the body (non-multipart POSTs, to make
+                // connection-failure retries re-sendable), send the buffered copy instead —
+                // the request stream has already been drained into it.
+                if (bufferedPostBody != null)
+                {
+                    var stringContent = new StringContent(bufferedPostBody, System.Text.Encoding.UTF8);
+                    if (!string.IsNullOrWhiteSpace(initialRequest.ContentType) &&
+                        System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(initialRequest.ContentType, out var bufferedContentType))
+                        stringContent.Headers.ContentType = bufferedContentType;
+                    else
+                        stringContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+                    req.Content = stringContent;
+                }
                 else
-                    streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-                // Preserve the multipart boundary/length so file-upload schema endpoints
-                // forward correctly to the child process.
-                if (initialRequest.ContentLength.HasValue)
-                    streamContent.Headers.ContentLength = initialRequest.ContentLength.Value;
-                req.Content = streamContent;
+                {
+                    var streamContent = new StreamContent(initialRequest.BodyReader.AsStream(leaveOpen: false));
+                    if (!string.IsNullOrWhiteSpace(initialRequest.ContentType) &&
+                        System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(initialRequest.ContentType, out var parsedContentType))
+                        streamContent.Headers.ContentType = parsedContentType;
+                    else
+                        streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+                    // Preserve the multipart boundary/length so file-upload schema endpoints
+                    // forward correctly to the child process.
+                    if (initialRequest.ContentLength.HasValue)
+                        streamContent.Headers.ContentLength = initialRequest.ContentLength.Value;
+                    req.Content = streamContent;
+                }
                 // ── END VEKTORNODE: SELVA FIX ──────────────────────────────────────────────
                 // SendAsync fully consumes the request body before returning, so disposing
-                // req (and its owned StreamContent) here is safe.
+                // req (and its owned content) here is safe.
                 return await client.SendAsync(req);
             }
 
@@ -363,27 +400,93 @@ namespace rhino.compute
         private static async Task ReverseProxyHandler(HttpRequest req, HttpResponse res, HttpMethod method)
         {
             await AwaitInitTask();
-            string responseString;
             try
             {
+                // A child process can be gone or dead (e.g. after an idle self-shutdown or an
+                // internal Rhino crash) while its port is still in the round-robin pool, so every
+                // request routed to it fails with "connection refused" until a manual
+                // /shutdown-children. Instead: when establishing the connection fails, evict that
+                // child (removes it from the pool, triggering a respawn) and retry against a
+                // fresh one.
+                //
+                // Retry safety: the retry only fires on HttpRequestError.ConnectionError, i.e. the
+                // connection was never established, so nothing reached a child (no duplicate
+                // solves). Non-multipart POST bodies are buffered once here because the request
+                // stream is forward-only and SendProxyRequest's owned StreamContent disposes it
+                // when an attempt fails — the buffered copy can be re-sent on every retry.
+                // Multipart bodies stay streamed to avoid duplicating large uploads in RAM; for
+                // those a connect failure still evicts the dead child but is not retried.
+                string bufferedPostBody = null;
+                var reqContentType = req.ContentType ?? string.Empty;
+                bool isMultipart = reqContentType.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase);
+                if (method == HttpMethod.Post && !isMultipart)
+                {
+                    using var sr = new System.IO.StreamReader(req.BodyReader.AsStream());
+                    bufferedPostBody = await sr.ReadToEndAsync();
+                }
+
                 using (new ConcurrentRequestTracker())
                 {
-                    var (baseurl, port) = ComputeChildren.GetComputeServerBaseUrl();
-                    using (var proxyResponse = await SendProxyRequest(req, method, baseurl))
+                    // Bound retries by the configured pool size (+1 so a single-child pool still
+                    // gets one respawn-and-retry). Capped so a total outage can't spin indefinitely.
+                    int maxAttempts = Math.Min(6, ComputeChildren.SpawnCount + 1);
+                    for (int attempt = 0; ; attempt++)
                     {
-                        ComputeChildren.UpdateLastCall();
-                        if (proxyResponse.StatusCode == System.Net.HttpStatusCode.OK)
-                            ComputeChildren.MoveToFrontOfQueue(port);
+                        var (baseurl, port) = ComputeChildren.GetComputeServerBaseUrl();
+                        HttpResponseMessage proxyResponse;
+                        try
+                        {
+                            proxyResponse = await SendProxyRequest(req, method, baseurl, bufferedPostBody);
+                        }
+                        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.ConnectionError)
+                        {
+                            // Could not establish a connection: the child is not listening. Drop it
+                            // from the pool so it stops being handed out and a replacement respawns.
+                            ComputeChildren.EvictChild(port);
 
-                        res.StatusCode = (int)proxyResponse.StatusCode;
-                        // Forward the upstream Content-Type so JSON responses arrive at the caller
-                        // as application/json rather than the ASP.NET Core default text/plain.
-                        if (proxyResponse.Content.Headers.ContentType != null)
-                            res.ContentType = proxyResponse.Content.Headers.ContentType.ToString();
-                        responseString = await proxyResponse.Content.ReadAsStringAsync();
+                            // Retry only when the request can be fully re-sent: GET (no body) or a
+                            // POST buffered above. Multipart streams are already consumed/disposed
+                            // by the failed attempt, so those surface the error to the caller (the
+                            // pool is healed for their next try). Mid-request failures (timeouts,
+                            // resets after connect) are deliberately not retried — the child may
+                            // already be solving. The last attempt is allowed to throw so a genuine
+                            // outage still surfaces as a 500.
+                            bool canResend = method == HttpMethod.Get || bufferedPostBody != null;
+                            if (!canResend || attempt >= maxAttempts - 1)
+                                throw;
+                            Log.Warning(ex, "Proxy connect to compute.geometry on port {Port} failed; evicting and retrying (attempt {Attempt}/{Max})", port, attempt + 1, maxAttempts);
+                            continue;
+                        }
+
+                        using (proxyResponse)
+                        {
+                            ComputeChildren.UpdateLastCall();
+                            if (proxyResponse.StatusCode == System.Net.HttpStatusCode.OK)
+                                ComputeChildren.MoveToFrontOfQueue(port);
+
+                            res.StatusCode = (int)proxyResponse.StatusCode;
+                            // Forward the upstream Content-Type so JSON responses arrive at the caller
+                            // as application/json rather than the ASP.NET Core default text/plain.
+                            if (proxyResponse.Content.Headers.ContentType != null)
+                                res.ContentType = proxyResponse.Content.Headers.ContentType.ToString();
+                            var responseString = await proxyResponse.Content.ReadAsStringAsync();
+                            // The child's error body is forwarded to the caller but was never recorded
+                            // server-side, leaving 500s from compute.geometry (e.g. failed /grasshopper
+                            // solves) undiagnosable from the parent log. Log the body on any non-success
+                            // status so the actual Grasshopper/solve error is captured here.
+                            if (!proxyResponse.IsSuccessStatusCode)
+                            {
+                                const int maxLogged = 4000;
+                                var body = responseString ?? string.Empty;
+                                Log.Warning("compute.geometry on port {Port} returned {Status} for {Method} {Path}: {Body}",
+                                    port, (int)proxyResponse.StatusCode, method, req.Path,
+                                    body.Length > maxLogged ? body.Substring(0, maxLogged) + "…[truncated]" : body);
+                            }
+                            await res.WriteAsync(responseString);
+                        }
+                        return;
                     }
                 }
-                await res.WriteAsync(responseString);
             }
             catch (Exception ex) when (ex is Microsoft.AspNetCore.Connections.ConnectionResetException ||
                                        ex is OperationCanceledException)

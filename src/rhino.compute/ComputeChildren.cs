@@ -197,6 +197,60 @@ namespace rhino.compute
             }
         }
 
+        /// <summary>
+        /// Remove the child on <paramref name="port"/> from the round-robin pool. Called by the
+        /// reverse proxy when establishing a connection to that child fails (connection refused —
+        /// nothing is listening on the port), and by the /child-exiting endpoint when a child
+        /// announces its own idle shutdown. A child whose process is still alive but whose HTTP
+        /// listener has died is invisible to the HasExited check in GetComputeServerBaseUrl, so it
+        /// would otherwise stay in rotation and fail every request routed to it until a manual
+        /// /shutdown-children. Evicting it here lets the normal SpawnCount refill respawn a
+        /// healthy replacement. No-op if the port is not tracked.
+        /// </summary>
+        /// <param name="kill">When true (proxy connect-failure path), also Kill() the process in
+        /// case it is alive with a dead listener. When false (/child-exiting path), the child is
+        /// already stopping itself, so we only drop the pool entry and leave it to exit cleanly.</param>
+        public static void EvictChild(int port, bool kill = true)
+        {
+            Process toKill = null;
+            lock (lockObject)
+            {
+                if (!computeProcesses.Any(t => t.Item2 == port))
+                    return;
+
+                var kept = new Queue<Tuple<Process, int>>();
+                foreach (var t in computeProcesses)
+                {
+                    if (t.Item2 == port)
+                        toKill = t.Item1;
+                    else
+                        kept.Enqueue(t);
+                }
+                computeProcesses = kept;
+            }
+
+            Log.Warning("Evicting compute.geometry on port {Port} from the pool (kill={Kill})", port, kill);
+            if (kill && toKill != null)
+            {
+                try
+                {
+                    if (!toKill.HasExited)
+                        toKill.Kill();
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "Exception killing evicted compute.geometry on port {Port}", port);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Spawn one compute.geometry child up to the SpawnCount cap. Reserves a port under a
+        /// brief lock, performs the actual Process.Start + startup wait outside the lock (so
+        /// other threads can continue serving requests through already-ready children), then
+        /// re-locks to enqueue. Cleans up the port reservation on failure. No-op when the pool
+        /// is already at or above SpawnCount.
+        /// </summary>
         public static void LaunchCompute()
         {
             // Resolve path before acquiring the lock to keep lock duration short.
