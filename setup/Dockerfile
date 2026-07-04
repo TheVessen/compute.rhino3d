@@ -7,16 +7,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # 1. Install base dependencies
 # ============================================================
 RUN apt update && apt install -y \
-    wget gpg nano git curl ca-certificates \
+    wget gpg nano git curl ca-certificates jq \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# 2. Install .NET 9 SDK
+# 2. Install .NET 10 SDK
 # ============================================================
 RUN wget https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh \
       -O /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/share/dotnet \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
     && rm /tmp/dotnet-install.sh
 
 ENV DOTNET_ROOT=/usr/share/dotnet
@@ -30,7 +30,7 @@ RUN wget -qO- https://mcneel-packages.s3.amazonaws.com/mcneel-packages.gpg.key \
     && echo "deb [signed-by=/usr/share/keyrings/mcneel-archive-keyring.gpg] \
       https://mcneel-packages.s3.amazonaws.com/deb stable main" \
       | tee /etc/apt/sources.list.d/mcneel.list \
-    && apt update && apt install -y rhino-compute \
+    && apt update && apt install -y rhino-compute yak-cli \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================

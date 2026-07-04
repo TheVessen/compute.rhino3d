@@ -152,6 +152,11 @@ namespace compute.geometry
             {
                 Serilog.Log.Debug("Creating headless Rhino document");
                 RhinoDoc.ActiveDoc = RhinoDoc.CreateHeadless(null);
+                // VEKTORNODE: undo recording must stay off server-side. With an active
+                // doc, GH_Document.NewSolution calls RhinoDoc.BeginUndoRecord, which in
+                // headless Linux Rhino invokes a GC'd Command.UndoCallback delegate and
+                // kills the child process.
+                RhinoDoc.ActiveDoc.UndoRecordingEnabled = false;
                 RhinoDoc.ActiveDoc.ModelAbsoluteTolerance = input.AbsoluteTolerance;
                 RhinoDoc.ActiveDoc.ModelAngleToleranceDegrees = input.AngleTolerance;
                 if (Enum.TryParse(input.ModelUnits, out UnitSystem units))

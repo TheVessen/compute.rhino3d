@@ -42,16 +42,16 @@ ok "Dependencies installed"
 # -------------------------------------------------------
 # .NET 9
 # -------------------------------------------------------
-log "Installing .NET 9 SDK"
+log "Installing .NET 10 SDK"
 if [ -f "$DOTNET_DIR/dotnet" ]; then
     ok ".NET already installed at $DOTNET_DIR — skipping"
 else
     wget -q https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh \
         -O /tmp/dotnet-install.sh
     chmod +x /tmp/dotnet-install.sh
-    /tmp/dotnet-install.sh --channel 9.0 --install-dir "$DOTNET_DIR" --quiet
+    /tmp/dotnet-install.sh --channel 10.0 --install-dir "$DOTNET_DIR" --quiet
     rm /tmp/dotnet-install.sh
-    ok ".NET 9 installed"
+    ok ".NET 10 installed"
 fi
 
 # Make dotnet available now and on future logins

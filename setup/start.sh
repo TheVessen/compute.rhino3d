@@ -39,6 +39,77 @@ echo ""
 echo "============================================"
 echo ""
 
+# ------------------------------------------------------------
+# Install yak packages declared in the manifest (packages.json,
+# mounted by docker-launch.sh). Already-installed packages are
+# skipped, so restarts are fast; recreating the container gives
+# a clean slate and reinstalls everything at the pinned versions.
+# ------------------------------------------------------------
+MANIFEST=/packages.json
+
+if [ -f "$MANIFEST" ]; then
+    echo "  Installing yak packages from manifest ..."
+    installed=$(yak list 2>/dev/null || true)
+
+    while IFS=$'\t' read -r name version; do
+        [ -z "$name" ] && continue
+        if echo "$installed" | grep -qi "^${name} "; then
+            echo "    $name already installed — skipping"
+            continue
+        fi
+        # yak takes the version as a second positional arg; passing an exact
+        # version (e.g. 1.0.0-beta.2) is also how prerelease packages install
+        if [ -n "$version" ] && [ "$version" != "null" ]; then
+            echo "    yak install $name $version"
+            yak install "$name" "$version" || echo "    WARNING: failed to install $name $version"
+        else
+            echo "    yak install $name"
+            yak install "$name" || echo "    WARNING: failed to install $name"
+        fi
+    done < <(jq -r '.yak[]? | [.name, (.version // "null")] | @tsv' "$MANIFEST")
+
+    # Sanity-check that declared local packages are actually present
+    # (either in /plugins or live-mounted under /plugins-local)
+    while read -r f; do
+        [ -z "$f" ] && continue
+        if [ ! -e "/plugins/$f" ] && [ ! -e "/plugins-local/$f" ]; then
+            echo "    WARNING: '$f' is declared in packages.json (local) but missing from /plugins and /plugins-local"
+        fi
+    done < <(jq -r '.local[]?' "$MANIFEST")
+
+    echo ""
+fi
+
+# ------------------------------------------------------------
+# Load custom plugins mounted at /plugins (see docker-launch.sh)
+#   *.gha / *.dll / folders  -> copied into the GH Libraries folder
+#   *.yak                    -> installed via yak
+# Runs on every container start, so updating a plugin is just
+# replacing the file on the host and `docker restart`.
+# ------------------------------------------------------------
+GH_LIBRARIES=/root/.config/Grasshopper/Libraries
+
+for src in /plugins /plugins-local; do
+    if [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ]; then
+        echo "  Loading custom plugins from $src ..."
+        mkdir -p "$GH_LIBRARIES"
+
+        # Loose assemblies and folders (everything except .yak archives)
+        find "$src" -mindepth 1 -maxdepth 1 ! -name '*.yak' ! -name 'README*' \
+            -exec cp -rf {} "$GH_LIBRARIES/" \;
+
+        # Yak archives
+        for y in "$src"/*.yak; do
+            [ -e "$y" ] || continue
+            echo "  yak install $(basename "$y")"
+            yak install "$y" || echo "  WARNING: failed to install $y"
+        done
+
+        echo "  Custom plugins loaded."
+        echo ""
+    fi
+done
+
 cd /home/rhino-compute-src/src
 
 # IMPORTANT: --urls http://0.0.0.0:6500 binds to all interfaces

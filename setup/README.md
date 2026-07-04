@@ -2,7 +2,34 @@
 
 Automated Docker setup for running Rhino.Compute from the x9 branch on Linux.
 
-## Quick Start
+## Quick Start (automated, macOS/Linux)
+
+Run the launch script — it checks for Docker, starts OrbStack/Docker Desktop if
+it's not running, builds the image, and runs the container:
+
+```bash
+cd setup
+RHINO_TOKEN=your-token-here ./docker-launch.sh
+```
+
+Or, to avoid typing the token every time, copy `.env.example` to `.env` and
+fill in `RHINO_TOKEN` (and any other overrides). `setup/.env` is gitignored
+and is loaded automatically:
+
+```bash
+cd setup
+cp .env.example .env
+# edit .env and set RHINO_TOKEN
+./docker-launch.sh
+```
+
+Values already set in your shell environment take priority over `.env`.
+
+See the script header for env vars (`PORT`, `CHILD_COUNT`, `IMAGE_NAME`,
+`REPO_URL`, `BRANCH`, `NO_BUILD`). Re-running it rebuilds the image and
+replaces the running container.
+
+## Quick Start (manual)
 
 ### 1. Build the image (one time)
 
@@ -81,6 +108,132 @@ http://host.docker.internal:5500/path/to/your/definition.gh
 The main server on 6500 is bound to `0.0.0.0` so it is reachable from outside
 the container. The child process on 6001 stays on localhost inside the container
 and is only used internally by the main server.
+
+## Plugin Manifest (packages.json)
+
+`setup/packages.json` declares every plugin the server needs — the single
+source of truth, tracked in git:
+
+```json
+{
+  "yak": [
+    { "name": "elefront", "version": "5.4.1" },
+    { "name": "selva", "version": "0.14.0.0" }
+  ],
+  "local": ["MyCustomPlugin.gha"]
+}
+```
+
+- **`yak`** — installed from the Yak server on container start. `version` is
+  optional; omit it to always get the latest.
+- **`local`** — file/folder names expected in `setup/plugins/` (see
+  [Custom Plugins](#custom-plugins-not-on-yak) below). The container warns at
+  startup if a declared file is missing.
+
+The manifest is mounted into the container and processed by `start.sh` on
+**every container start**. Already-installed packages are skipped, so
+restarts stay fast. Because the manifest is applied on start, recreating the
+container (`./docker-launch.sh`) automatically reinstalls everything — no
+state to lose.
+
+**To change a pinned version:** edit `packages.json`, then recreate the
+container (`NO_BUILD=1 ./docker-launch.sh`). A plain `docker restart` skips
+packages that are already installed, so it won't pick up version changes.
+
+Check what got installed:
+
+```bash
+docker logs rhino-compute-x9 | head -40
+docker exec rhino-compute-x9 yak list
+```
+
+## Installing Grasshopper Plugins (Yak) — ad hoc
+
+> Prefer declaring packages in `packages.json` (section above) — it survives
+> container recreation. Use `docker exec` only for quickly trying a plugin
+> out before adding it to the manifest.
+
+`yak-cli` is installed in the image (via the same McNeel apt repo used for
+`rhino-compute`). Install plugins into the **running container**:
+
+```bash
+docker exec rhino-compute-x9 yak install <plugin-name>
+```
+
+(use the container name/ID from `docker ps` if you didn't use `docker-launch.sh`,
+which names it `rhino-compute-x9` by default).
+
+Then restart the container so compute.geometry picks up the new plugin:
+
+```bash
+docker restart rhino-compute-x9
+```
+
+List / remove plugins:
+
+```bash
+docker exec rhino-compute-x9 yak list
+docker exec rhino-compute-x9 yak uninstall <plugin-name>
+```
+
+**Important:** plugins installed this way live inside the container's
+writable layer, not the image. If you run `docker-launch.sh` again (or any
+`docker rm` + `docker run`), the container is recreated from the image and
+the plugins are gone. To make them permanent, either:
+
+- `docker commit rhino-compute-x9 rhino-compute-x9-custom` and use that image
+  tag for future runs (`IMAGE_NAME=rhino-compute-x9-custom NO_BUILD=1
+  ./docker-launch.sh`), or
+- re-run the `yak install` command(s) after each rebuild/relaunch.
+
+Yak installs to `/root/.local/share/mcneel/rhinoceros/packages/9.0/` — the
+container runs as root, so this is where the compute service looks for
+plugins automatically.
+
+## Custom Plugins (not on Yak)
+
+Put your own packages in `setup/plugins/` — the folder is volume-mounted into
+the container at `/plugins` (by `docker-launch.sh`) and loaded automatically
+on every container start:
+
+- `*.gha`, `*.dll`, and folders are copied into the Grasshopper Libraries
+  folder (`/root/.config/Grasshopper/Libraries/`)
+- `*.yak` archives are installed via `yak install`
+
+To add or update a plugin:
+
+```bash
+cp /path/to/MyPlugin.gha setup/plugins/
+docker restart rhino-compute-x9
+```
+
+Because the folder lives on the host, plugins **survive container
+recreation** — unlike `docker exec ... yak install`, there is nothing to
+redo after re-running `docker-launch.sh`.
+
+### Live-mounting a plugin you're developing
+
+Instead of copying build output into `setup/plugins/` after every build, set
+`LOCAL_PLUGINS` in `setup/.env` to the build folder(s), comma-separated:
+
+```bash
+LOCAL_PLUGINS=/Users/you/coding/my-plugin/Build/MyPlugin.Grasshopper/net7.0
+```
+
+`docker-launch.sh` mounts each folder read-only under `/plugins-local/local-<i>-<name>`
+(using the parent folder's name when the target is a generic `net7.0`/`bin`/
+`Release` folder). The dev loop is then:
+
+```bash
+dotnet build            # rebuild your plugin on the host
+docker restart rhino-compute-x9   # re-copies plugins into GH Libraries
+```
+
+Optionally declare the mount name under `"local"` in `packages.json` so the
+container warns if the mount is missing.
+
+> Note: plugins must be pure .NET to load on Linux Rhino. A .gha that
+> P/Invokes Windows-only native libraries will fail inside the container.
 
 ## Useful Commands
 

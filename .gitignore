@@ -51,3 +51,4 @@ package/version/version.cs
 /rhinocomputepackage
 **/.idea
 src/compute.sln.DotSettings.user
+setup/packages.json
