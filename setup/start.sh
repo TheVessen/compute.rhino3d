@@ -110,6 +110,43 @@ for src in /plugins /plugins-local; do
     fi
 done
 
+# ------------------------------------------------------------
+# Flatten TFM subfolders (MyPlugin/net7.0/*.gha -> MyPlugin/*).
+# Rhino 9 on Linux crashes resolving multi-target plugin layouts
+# (GetRuntimeSpecificFolder bug: OS suffix is null on Linux), and
+# one such folder silently breaks loading of ALL Grasshopper
+# plugins. Applies to both copied plugins and yak packages.
+# Prefers the netcore folder (net*.0) when several TFMs exist.
+# ------------------------------------------------------------
+YAK_PACKAGES=/root/.local/share/mcneel/rhinoceros/packages
+
+flatten_tfm_dirs() {
+    local base="$1"
+    [ -d "$base" ] || return 0
+    find "$base" -type d \( -name "net[0-9].0*" -o -name "net[0-9][0-9].0*" -o -name "net4[0-9]*" \) 2>/dev/null \
+        | while read -r tfm; do
+            ls "$tfm"/*.gha >/dev/null 2>&1 || continue
+            parent="$(dirname "$tfm")"
+            case "$(basename "$tfm")" in
+                net4*)
+                    # net48-only plugins can't load on .NET-core Rhino anyway;
+                    # only flatten if no netcore sibling exists
+                    if ls -d "$parent"/net[0-9].0* "$parent"/net[0-9][0-9].0* >/dev/null 2>&1; then
+                        echo "  Dropping $(basename "$parent")/$(basename "$tfm") (netcore variant exists)"
+                        rm -rf "$tfm"
+                        continue
+                    fi
+                    ;;
+            esac
+            echo "  Flattening $(basename "$parent")/$(basename "$tfm")"
+            cp -rf "$tfm"/. "$parent"/
+            rm -rf "$tfm"
+        done
+}
+
+flatten_tfm_dirs "$GH_LIBRARIES"
+flatten_tfm_dirs "$YAK_PACKAGES"
+
 cd /home/rhino-compute-src/src
 
 # IMPORTANT: --urls http://0.0.0.0:6500 binds to all interfaces

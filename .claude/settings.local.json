@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -r \"old.*way\\\\|new.*way\\\\|legacy\\\\|architecture\\\\|child.*process\" /d/Coding/compute.rhino3d/*.md)"
+      "Bash(grep -r \"old.*way\\\\|new.*way\\\\|legacy\\\\|architecture\\\\|child.*process\" /d/Coding/compute.rhino3d/*.md)",
+      "Bash(docker exec *)"
     ]
   }
 }

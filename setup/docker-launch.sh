@@ -204,9 +204,52 @@ docker run -d \
 
 ok "Container started"
 
+# -------------------------------------------------------
+# Wait for the server to actually respond before declaring victory.
+# Building + booting Rhino/Grasshopper inside the container can take
+# a while — a bare "container started" message is not the same as
+# "the server is ready", so poll until it answers or clearly failed.
+# -------------------------------------------------------
+log "Waiting for Rhino.Compute to become ready..."
+
+HEALTH_HEADER=()
+[ -n "$RHINO_COMPUTE_KEY" ] && HEALTH_HEADER=(-H "RhinoComputeKey: $RHINO_COMPUTE_KEY")
+
+ready=0
+for i in $(seq 1 90); do
+    if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}\$"; then
+        echo ""
+        echo "ERROR: container '$CONTAINER_NAME' exited unexpectedly during startup."
+        echo "Last log lines:"
+        docker logs --tail 30 "$CONTAINER_NAME" 2>&1 | sed 's/^/    /'
+        exit 1
+    fi
+    code="$(curl -s -o /dev/null -w '%{http_code}' "${HEALTH_HEADER[@]}" "http://localhost:${PORT}/healthcheck" 2>/dev/null || true)"
+    if [ "$code" = "200" ]; then
+        ready=1
+        break
+    fi
+    printf "."
+    sleep 2
+done
+echo ""
+
+if [ "$ready" = "1" ]; then
+    ok "Rhino.Compute responded to /healthcheck (took ~$((i * 2))s)"
+else
+    echo ""
+    echo "WARNING: server did not respond within ~180s. It may still be"
+    echo "starting (first boot after a rebuild can be slow) — check:"
+    echo "    docker logs -f $CONTAINER_NAME"
+fi
+
 echo ""
 echo "============================================================"
-echo "  Done! Rhino.Compute is starting up."
+if [ "$ready" = "1" ]; then
+    echo "  Done! Rhino.Compute is up and responding."
+else
+    echo "  Container started, but not confirmed ready yet — see above."
+fi
 echo "============================================================"
 echo ""
 echo "  Connect from your Mac:"
@@ -214,6 +257,9 @@ echo "    http://localhost:${PORT}"
 echo ""
 echo "  Healthcheck:"
 echo "    curl http://localhost:${PORT}/healthcheck"
+echo ""
+echo "  Check status any time:"
+echo "    ./docker-status.sh"
 echo ""
 echo "  View logs:"
 echo "    docker logs -f $CONTAINER_NAME"

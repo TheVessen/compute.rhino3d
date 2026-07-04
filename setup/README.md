@@ -27,7 +27,26 @@ Values already set in your shell environment take priority over `.env`.
 
 See the script header for env vars (`PORT`, `CHILD_COUNT`, `IMAGE_NAME`,
 `REPO_URL`, `BRANCH`, `NO_BUILD`). Re-running it rebuilds the image and
-replaces the running container.
+replaces the running container. It waits for `/healthcheck` to respond
+before declaring success — you'll see a clear pass/fail, not just
+"container started".
+
+## Checking Status
+
+`docker start` / `docker restart` print almost nothing — the container can
+be "running" while Rhino/Grasshopper are still booting inside it, or it can
+crash-loop silently. Use `docker-status.sh` instead of guessing:
+
+```bash
+cd setup
+./docker-status.sh
+```
+
+It reports: whether the daemon is up, whether the container is running,
+whether `/healthcheck` actually responds, which Grasshopper plugins loaded
+(the other thing that can silently fail — see
+[docs/grasshopper-plugins-not-loading-linux.md](../docs/grasshopper-plugins-not-loading-linux.md)),
+and the last few log lines either way.
 
 ## Quick Start (manual)
 
@@ -307,6 +326,11 @@ Edit files in VS Code on Windows, build and run inside the container. Changes
 are reflected immediately because the volume mount keeps them in sync.
 
 ## Troubleshooting
+
+**Solves fail with PayAttentionException / plugins missing from `/plugins/gh/installed`:**
+See [docs/grasshopper-plugins-not-loading-linux.md](../docs/grasshopper-plugins-not-loading-linux.md)
+— a full write-up of why Grasshopper plugins can silently fail to load on
+Linux and how this repo fixes it.
 
 **"Connection refused" from Windows:**
 The server might be listening on localhost inside the container instead of
