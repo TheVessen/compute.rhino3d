@@ -52,3 +52,4 @@ package/version/version.cs
 **/.idea
 src/compute.sln.DotSettings.user
 setup/packages.json
+.claude/*/**

@@ -3,3 +3,6 @@
 # custom plugin binaries (mounted into the container by docker-launch.sh)
 plugins/*
 !plugins/README.md
+
+# custom fonts (often licensed — mounted into the container by docker-launch.sh)
+fonts/*

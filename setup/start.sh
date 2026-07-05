@@ -147,6 +147,18 @@ flatten_tfm_dirs() {
 flatten_tfm_dirs "$GH_LIBRARIES"
 flatten_tfm_dirs "$YAK_PACKAGES"
 
+# ------------------------------------------------------------
+# Refresh the font cache so custom fonts mounted at
+# /usr/local/share/fonts/custom (see docker-launch.sh) are
+# visible to text-to-curve components.
+# ------------------------------------------------------------
+if command -v fc-cache >/dev/null 2>&1; then
+    if [ -d /usr/local/share/fonts/custom ] && [ -n "$(ls -A /usr/local/share/fonts/custom 2>/dev/null)" ]; then
+        echo "  Refreshing font cache (custom fonts found) ..."
+        fc-cache -f >/dev/null 2>&1
+    fi
+fi
+
 cd /home/rhino-compute-src/src
 
 # IMPORTANT: --urls http://0.0.0.0:6500 binds to all interfaces

@@ -154,6 +154,11 @@ mkdir -p "$SCRIPT_DIR/plugins"
 MOUNT_ARGS=(-v "$SCRIPT_DIR/plugins:/plugins:ro")
 [ -f "$SCRIPT_DIR/packages.json" ] && MOUNT_ARGS+=(-v "$SCRIPT_DIR/packages.json:/packages.json:ro")
 
+# Custom fonts (setup/fonts) — needed by text-to-curve components; the container
+# ships only Liberation/DejaVu. start.sh runs fc-cache on start.
+mkdir -p "$SCRIPT_DIR/fonts"
+MOUNT_ARGS+=(-v "$SCRIPT_DIR/fonts:/usr/local/share/fonts/custom:ro")
+
 # Extra live-mounted plugin folders (LOCAL_PLUGINS, comma-separated host paths).
 # Mounted under /plugins-local (NOT inside /plugins — that mount is read-only,
 # so Docker cannot create nested mountpoints in it). start.sh scans both.

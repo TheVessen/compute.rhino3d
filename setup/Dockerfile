@@ -8,6 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # ============================================================
 RUN apt update && apt install -y \
     wget gpg nano git curl ca-certificates jq \
+    libfontconfig1 fontconfig fonts-liberation fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================

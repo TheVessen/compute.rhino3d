@@ -2,6 +2,9 @@
 
 Automated Docker setup for running Rhino.Compute from the x9 branch on Linux.
 
+> Just need the commands? See [docs/quick-start-docker.md](../docs/quick-start-docker.md)
+> for a no-prose cheat-sheet of the day-to-day workflow.
+
 ## Quick Start (automated, macOS/Linux)
 
 Run the launch script — it checks for Docker, starts OrbStack/Docker Desktop if

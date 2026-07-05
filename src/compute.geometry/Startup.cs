@@ -217,10 +217,10 @@ namespace compute.geometry
                 {
                     pluginObject.RunHeadless();
 
-                    // VEKTORNODE: on Linux, RunHeadless only flags GH as headless — nothing
-                    // ever triggers the external library scan (on Windows the editor init
-                    // pipeline calls it). Without this, GH lazily initializes with core
-                    // components only and every GHA in Libraries/yak is silently ignored.
+                    // VEKTORNODE: GH loads external libraries exactly once, inside the
+                    // Instances.ComponentServer getter (guarded by a null check). Any
+                    // exception in that load is swallowed into a MessageBox that never
+                    // shows headless — which is how plugin loading fails silently here.
                     // Rhino 9 WIP bug: PlugIn.GetMultiTargetPath → HostUtils.GetRuntimeSpecificFolder
                     // throws on Linux (the OS suffix is null there, and string.IndexOf(null) throws)
                     // for any plugin laid out with TFM subfolders (MyPlugin/net7.0/MyPlugin.gha).
@@ -248,8 +248,11 @@ namespace compute.geometry
                         }
 
                         Log.Information("Loading Grasshopper external libraries (GHA plugins)...");
+                        // Touching the getter triggers GH's own guarded, once-only
+                        // LoadExternalFiles. Do NOT call LoadExternalFiles() again here —
+                        // that loads every assembly twice and floods the component server
+                        // with object-ID conflicts ("N objects could not be loaded").
                         var componentServer = Grasshopper.Instances.ComponentServer;
-                        componentServer.LoadExternalFiles(false);
                         foreach (var lex in componentServer.LoadingExceptions)
                             Log.Warning("Grasshopper library load error: {Name}: {Message}", lex.Name, lex.Message);
                         foreach (var lib in componentServer.Libraries)

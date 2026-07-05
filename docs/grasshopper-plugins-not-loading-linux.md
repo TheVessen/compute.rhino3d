@@ -35,16 +35,20 @@ internal static void RunHeadless()
 }
 ```
 
-Nothing ever triggered the actual plugin scan. Grasshopper initialized
-lazily with core components only, so definitions loaded and solved, but
-any component from a plugin was missing — and if your outputs sit in
-plugin components, you get zero outputs.
+(Correction from deeper digging: Grasshopper *does* run the plugin scan
+lazily — the `Instances.ComponentServer` getter loads external files
+exactly once on first access. But any exception in that load is swallowed
+into a `MessageBox` that never shows headless, so when the scan crashed
+(next section), it failed invisibly and GH carried on with core
+components only. Compute now triggers this load explicitly at startup and
+logs every loaded plugin and load error, so silence is no longer
+possible. Important: touch the `ComponentServer` getter — do NOT call
+`LoadExternalFiles()` yourself on top of it, or every assembly loads
+twice and thousands of component-ID conflicts follow.)
 
-### 2. A Rhino bug on Linux made the scan crash when we did trigger it
+### 2. A Rhino bug on Linux made the scan crash
 
-After adding an explicit `GH_ComponentServer.LoadExternalFiles()` call,
-still nothing loaded. The culprit is inside Rhino itself
-(`HostUtils.GetRuntimeSpecificFolder`):
+The scan died inside Rhino itself (`HostUtils.GetRuntimeSpecificFolder`):
 
 ```csharp
 string suffix = RunningOnWindows ? "-windows" : (RunningOnOSX ? "-macos" : null);
@@ -93,6 +97,23 @@ All in this repo:
    `MyPlugin/net7.0/*.gha` to `MyPlugin/*.gha` when staging plugins
    (both the mounted plugin folders and yak packages), so they load
    normally despite the Rhino bug.
+
+### Bonus: script components (C#/Python) can 500 right after a container start
+
+Separate but related: definitions containing script components
+(RhinoCodePluginGH) can fail with `NullReferenceException` in
+`Rhino.Runtime.Code.Languages.LanguageRegistryQuery.WherePasses` when
+several requests arrive in parallel right after a (re)start. Script
+languages initialize lazily on the first scripted definition, and that
+init races itself under concurrent requests. Once the languages finish
+loading (seconds), subsequent requests succeed — a retry recovers.
+
+We chose to keep the code close to upstream and NOT ship a workaround.
+If it bites, the known fix is a one-time startup warm-up via
+`RhinoCodePlatform.Rhino3D.Registrar.StartScriptingLanguages(LanguageSpec.CSharp/Python3, true)`
+(the same blocking init path the script components use; ~0.3s for C#,
+~10s for Python) — call it after Grasshopper loads in
+`Startup.RhinoCoreStartup`.
 
 ## How to tell if you're hitting this
 
