@@ -63,15 +63,15 @@ layer and you get the old code. Expect several minutes (full apt install,
 
 ## Common env vars (set in `setup/.env` or inline)
 
-| Var                 | Purpose                                             |
-| -------------------- | --------------------------------------------------- |
-| `RHINO_TOKEN`         | Core-hour billing token (required for real solves)  |
-| `RHINO_COMPUTE_KEY`   | Optional shared secret clients must send as header  |
-| `PORT`                | Host port (default `6500`)                          |
-| `CHILD_COUNT`         | Number of compute.geometry children (default `1`)   |
-| `LOCAL_PLUGINS`       | Comma-separated host folders to live-mount as plugins |
-| `NO_BUILD=1`          | Skip image build, just recreate the container        |
-| `FRESH=1`             | No-cache rebuild — use after pushing source changes  |
+| Var                 | Purpose                                               |
+| ------------------- | ----------------------------------------------------- |
+| `RHINO_TOKEN`       | Core-hour billing token (required for real solves)    |
+| `RHINO_COMPUTE_KEY` | Optional shared secret clients must send as header    |
+| `PORT`              | Host port (default `6500`)                            |
+| `CHILD_COUNT`       | Number of compute.geometry children (default `1`)     |
+| `LOCAL_PLUGINS`     | Comma-separated host folders to live-mount as plugins |
+| `NO_BUILD=1`        | Skip image build, just recreate the container         |
+| `FRESH=1`           | No-cache rebuild — use after pushing source changes   |
 
 ## Everything runs locally
 
