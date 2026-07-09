@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update && apt install -y \
     wget gpg nano git curl ca-certificates jq \
     libfontconfig1 fontconfig fonts-liberation fonts-dejavu-core \
+    libgdiplus \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
@@ -22,6 +23,14 @@ RUN wget https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.
 
 ENV DOTNET_ROOT=/usr/share/dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
+
+# System.Drawing.Common looks for libgdiplus by the names libgdiplus.dll /
+# libgdiplus.dll.so, but the apt package ships it as libgdiplus.so.0. Resolve the
+# real path from the package's own file list and alias the names the loader wants.
+RUN GDIP="$(dpkg -L libgdiplus | grep -m1 'libgdiplus\.so')" \
+    && ln -sf "$GDIP" /usr/lib/libgdiplus.so \
+    && ln -sf "$GDIP" /usr/lib/libgdiplus.dll \
+    && ln -sf "$GDIP" /usr/lib/libgdiplus.dll.so
 
 # ============================================================
 # 3. Add McNeel package repo and install Rhino runtime libs
