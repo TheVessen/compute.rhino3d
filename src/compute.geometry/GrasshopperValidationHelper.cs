@@ -14,6 +14,17 @@ namespace compute.geometry
     // VEKTORNODE: SELVA — entire file. Supports the grasshopper/schema endpoints
     // (FixedEndpoints.cs) that extract embedded UI Builder schemas from Selva definitions.
     // Not present in upstream.
+    //
+    // UNTYPED COUPLING TO THE SELVA PLUGIN. This assembly cannot reference Selva.GH, so the
+    // component type and its schema field are matched by literal name via reflection:
+    //
+    //     "GH_UIBuilderComponent"  — Selva.GH/Features/UIBuilder/Components/GH_UIBuilderComponent.cs
+    //     "ContextBakeComponent"   — VektorNode GH library
+    //     "_embeddedSchema"        — private field on GH_UIBuilderComponent
+    //
+    // Renaming any of those on the plugin side compiles clean there and silently breaks schema
+    // extraction here. Both lookups deliberately walk the base chain rather than matching the leaf
+    // type — see IsComponentOfType and GetEmbeddedSchema for why (OBSOLETE_* subclasses).
     internal static class GrasshopperValidationHelper
     {
         static readonly HttpClient _http = new HttpClient();
@@ -61,11 +72,35 @@ namespace compute.geometry
             return archive.ExtractObject(doc, "Definition") ? doc : null;
         }
 
+        /// <summary>
+        ///     Whether <paramref name="obj" /> is of the named Selva component type, or derives from it.
+        ///
+        ///     Must walk the base chain, not compare the leaf name: when Selva makes a breaking param
+        ///     change it pins the old shape as an OBSOLETE_* subclass of the live component (e.g.
+        ///     OBSOLETE_UIBridge_UntilV0_15_4 : GH_UIBuilderComponent) so existing .gh files keep
+        ///     loading. Those files deserialize into the subclass, and the GH-side IGH_UpgradeObject
+        ///     only runs on an interactive right-click → Upgrade — never here, where documents are
+        ///     deserialized headlessly. An exact leaf-name match therefore rejects every definition
+        ///     saved before the breaking change, permanently.
+        ///
+        ///     Name-based because compute cannot reference Selva.GH; `is` is unavailable.
+        /// </summary>
+        public static bool IsComponentOfType(IGH_DocumentObject obj, string typeName)
+        {
+            for (var t = obj?.GetType(); t != null; t = t.BaseType)
+            {
+                if (string.Equals(t.Name, typeName, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
+        }
+
         public static List<GH_Component> GetSchemaContextBakeComponents(GH_Document doc)
         {
             // First try to find ContextBakeComponent (requires the plugin to be loaded)
             var viaBake = doc.Objects
-                .Where(o => o.GetType().Name == "ContextBakeComponent")
+                .Where(o => IsComponentOfType(o, "ContextBakeComponent"))
                 .OfType<GH_Component>()
                 .Where(c => c.Params.Input.Count > 0
                     && c.Params.Input[0].Sources.Any(s => s.NickName == "Schema"))
@@ -76,7 +111,7 @@ namespace compute.geometry
 
             // Fallback: find GH_UIBuilderComponent directly (Context Bake plugin may not be installed)
             return doc.Objects
-                .Where(o => o.GetType().Name == "GH_UIBuilderComponent")
+                .Where(o => IsComponentOfType(o, "GH_UIBuilderComponent"))
                 .OfType<GH_Component>()
                 .ToList();
         }
@@ -84,18 +119,33 @@ namespace compute.geometry
         public static IGH_DocumentObject GetSchemaParentComponent(GH_Component contextBakeOrUiBuilder)
         {
             // If this is already a GH_UIBuilderComponent, return it directly
-            if (contextBakeOrUiBuilder.GetType().Name == "GH_UIBuilderComponent")
+            if (IsComponentOfType(contextBakeOrUiBuilder, "GH_UIBuilderComponent"))
                 return contextBakeOrUiBuilder;
 
             var source = contextBakeOrUiBuilder.Params.Input[0].Sources.FirstOrDefault(s => s.NickName == "Schema");
             return source?.Attributes?.GetTopLevel?.DocObject;
         }
 
+        /// <summary>
+        ///     Reads the UI Builder's private _embeddedSchema field.
+        ///
+        ///     Must walk the base chain: GetField with NonPublic|Instance searches only the exact
+        ///     type, and private fields on base classes are deliberately excluded from that lookup.
+        ///     A definition saved before a breaking param change deserializes into an OBSOLETE_*
+        ///     subclass which inherits (but does not declare) the field, so a single-level lookup
+        ///     returns null and the schema reads as missing even though it loaded fine.
+        /// </summary>
         public static object GetEmbeddedSchema(IGH_DocumentObject uiBuilderComponent)
         {
-            return uiBuilderComponent.GetType()
-                .GetField("_embeddedSchema", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.GetValue(uiBuilderComponent);
+            for (var t = uiBuilderComponent?.GetType(); t != null; t = t.BaseType)
+            {
+                var field = t.GetField("_embeddedSchema",
+                    BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (field != null)
+                    return field.GetValue(uiBuilderComponent);
+            }
+
+            return null;
         }
 
         public static JObject SchemaToJson(object schema)

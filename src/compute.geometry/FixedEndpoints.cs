@@ -260,7 +260,7 @@ namespace compute.geometry
                 var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
                 Log.Debug("grasshopper/schema: schema parent component type={Type}", parent?.GetType().Name ?? "null");
 
-                if (parent?.GetType().Name != "GH_UIBuilderComponent")
+                if (!GrasshopperValidationHelper.IsComponentOfType(parent, "GH_UIBuilderComponent"))
                 {
                     var error = "The 'Schema' source is not coming from a 'UI Builder' component.";
                     Log.Warning("grasshopper/schema: {Error} (got {Type})", error, parent?.GetType().Name ?? "null");
