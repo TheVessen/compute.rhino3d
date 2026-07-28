@@ -247,7 +247,7 @@ namespace compute.geometry
             foreach (var component in schemaComponents)
             {
                 var parent = GrasshopperValidationHelper.GetSchemaParentComponent(component);
-                if (parent?.GetType().Name != "GH_UIBuilderComponent")
+                if (!GrasshopperValidationHelper.IsComponentOfType(parent, "GH_UIBuilderComponent"))
                     return GrasshopperValidationHelper.ErrorResult(fileName, "The 'Schema' source is not coming from a 'UI Builder' component.");
 
                 var schema = GrasshopperValidationHelper.GetEmbeddedSchema(parent);
