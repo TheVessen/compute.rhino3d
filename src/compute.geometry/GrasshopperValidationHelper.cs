@@ -14,6 +14,17 @@ namespace compute.geometry
     // VEKTORNODE: SELVA — entire file. Supports the grasshopper/schema endpoints
     // (FixedEndpoints.cs) that extract embedded UI Builder schemas from Selva definitions.
     // Not present in upstream/8.x.
+    //
+    // UNTYPED COUPLING TO THE SELVA PLUGIN. This assembly cannot reference Selva.GH, so the
+    // component type and its schema field are matched by literal name via reflection:
+    //
+    //     "GH_UIBuilderComponent"  — Selva.GH/Features/UIBuilder/Components/GH_UIBuilderComponent.cs
+    //     "ContextBakeComponent"   — VektorNode GH library
+    //     "_embeddedSchema"        — private field on GH_UIBuilderComponent
+    //
+    // Renaming any of those on the plugin side compiles clean there and silently breaks schema
+    // extraction here. Both lookups deliberately walk the base chain rather than matching the leaf
+    // type — see IsComponentOfType and GetEmbeddedSchema for why (OBSOLETE_* subclasses).
     internal static class GrasshopperValidationHelper
     {
         static readonly HttpClient _http = new HttpClient();
