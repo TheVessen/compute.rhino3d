@@ -148,10 +148,53 @@ namespace compute.geometry
             return null;
         }
 
+        /// <summary>
+        ///     Serializes an embedded UISchema to its canonical compute wire shape.
+        ///
+        ///     Must delegate to the plugin's own ISelvaSerializableGoo.ToComputeJson() rather than
+        ///     calling JsonConvert here. Selva internalizes its Newtonsoft into Selva.dll, so the
+        ///     [JsonProperty("id")] attributes on UISchema are stamped with a JsonPropertyAttribute
+        ///     type from a different assembly identity than the Newtonsoft this assembly loads. Our
+        ///     serializer does not recognize them, silently falls back to raw CLR member names, and
+        ///     emits PascalCase ("Inputs", "Layout") — which every Selva client reads as a schema
+        ///     with no inputs. The plugin's own serializer sees its own attributes and settings.
+        ///
+        ///     Returns null when the seam is unavailable, so callers can fail loudly instead of
+        ///     shipping a mis-cased schema. See Selva.GH ISelvaSerializableGoo / UISchemaGoo.
+        /// </summary>
         public static JObject SchemaToJson(object schema)
         {
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(schema);
+            if (schema == null)
+                return null;
+
+            var json = TryGetSchemaComputeJson(schema);
+            if (json == null)
+                return null;
+
             return JObject.Parse(json);
+        }
+
+        // Wraps the bare UISchema in the plugin's UISchemaGoo (located in the schema's own assembly,
+        // by name — this assembly cannot reference Selva.GH) and asks it for its wire format.
+        static string TryGetSchemaComputeJson(object schema)
+        {
+            var gooType = schema.GetType().Assembly
+                              .GetType("Selva.GH.Features.UIBuilder.Goos.UISchemaGoo")
+                          ?? AppDomain.CurrentDomain.GetAssemblies()
+                              .Select(a => SafeGetType(a, "Selva.GH.Features.UIBuilder.Goos.UISchemaGoo"))
+                              .FirstOrDefault(t => t != null);
+
+            if (gooType == null)
+                return null;
+
+            var goo = Activator.CreateInstance(gooType, schema);
+            return gooType.GetMethod("ToComputeJson")?.Invoke(goo, null) as string;
+        }
+
+        static Type SafeGetType(Assembly assembly, string fullName)
+        {
+            try { return assembly.GetType(fullName); }
+            catch { return null; }
         }
 
         // Serializes a list of schema parameters (inputs or outputs) into a JArray.

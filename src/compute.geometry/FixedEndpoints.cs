@@ -275,8 +275,19 @@ namespace compute.geometry
                     return GrasshopperValidationHelper.ErrorResult(fileName, error);
                 }
 
+                var schemaJson = GrasshopperValidationHelper.SchemaToJson(schema);
+                if (schemaJson == null)
+                {
+                    var error = "Could not serialize the embedded schema: this compute server could not reach " +
+                        "the Selva plugin's own serializer (UISchemaGoo.ToComputeJson). Serializing it here would " +
+                        "emit PascalCase property names that clients read as an empty schema. Check that the " +
+                        "installed Selva.gha matches this compute build.";
+                    Log.Warning("grasshopper/schema: {Error}", error);
+                    return GrasshopperValidationHelper.ErrorResult(fileName, error);
+                }
+
                 Log.Debug("grasshopper/schema: extracted schema successfully from file={FileName}", fileName);
-                schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
+                schemas.Add(schemaJson);
             }
 
             return GrasshopperValidationHelper.SuccessResult(fileName, schemas);
