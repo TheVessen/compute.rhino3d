@@ -255,7 +255,15 @@ namespace compute.geometry
                     return GrasshopperValidationHelper.ErrorResult(fileName,
                         "The UI Builder component was found but contains no embedded schema. Configure and save your schema inside the UI Builder component.");
 
-                schemas.Add(GrasshopperValidationHelper.SchemaToJson(schema));
+                var schemaJson = GrasshopperValidationHelper.SchemaToJson(schema);
+                if (schemaJson == null)
+                    return GrasshopperValidationHelper.ErrorResult(fileName,
+                        "Could not serialize the embedded schema: this compute server could not reach the " +
+                        "Selva plugin's own serializer (UISchemaGoo.ToComputeJson). Serializing it here would " +
+                        "emit PascalCase property names that clients read as an empty schema. Check that the " +
+                        "installed Selva.gha matches this compute build.");
+
+                schemas.Add(schemaJson);
             }
 
             return GrasshopperValidationHelper.SuccessResult(fileName, schemas);
